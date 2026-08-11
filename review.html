@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FastTrack — סקירת עיצוב</title>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#0E1013;--panel:#14171A;--text:#EDEAE0;--muted:#A8B0B6;--gold:#E0B75C;--border:#2A3136;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Heebo",sans-serif;padding:24px;}
+  h1{font-family:"Frank Ruhl Libre",serif;font-size:24px;margin:0 0 4px;}
+  p.sub{color:var(--muted);font-size:14px;margin:0 0 24px;}
+  .states{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;}
+  .state{flex:0 0 auto;}
+  .state h2{font-family:"Frank Ruhl Libre",serif;font-size:16px;margin:0 0 2px;color:var(--gold);}
+  .state p{color:var(--muted);font-size:12px;margin:0 0 8px;max-width:412px;line-height:1.5;}
+  .frame{width:412px;height:860px;border:1px solid var(--border);border-radius:20px;
+         overflow:hidden;background:var(--panel);box-shadow:0 10px 30px rgba(0,0,0,.5);}
+  iframe{width:412px;height:860px;border:0;display:block;}
+  .note{margin-top:28px;padding:16px;border:1px solid var(--border);border-radius:14px;
+        background:var(--panel);font-size:13px;color:var(--muted);line-height:1.7;max-width:900px;}
+  .note b{color:var(--text);}
+  .note ul{margin:8px 0 0;padding-inline-start:1.2em;}
+</style>
+</head>
+<body>
+<h1>FastTrack — סקירת עיצוב</h1>
+<p class="sub">שלושת המצבים ברוחב 412px (Samsung Ultra). גלול בתוך כל מסגרת.</p>
+
+<div class="states">
+  <div class="state">
+    <h2>1 · בצום, לפני הקצב</h2>
+    <p>שעה 14 מתוך יעד 18. טבעת התקדמות, פס שלבים, וכרטיס סטטוס חי.</p>
+    <div class="frame"><iframe src="demo-fasting.html" title="fasting"></iframe></div>
+  </div>
+
+  <div class="state">
+    <h2>2 · לא בצום, מאחורי הקצב</h2>
+    <p>אותם נתונים עם קצב ירידה איטי. שים לב לתג האדום ולקו התחזית בגרף.</p>
+    <div class="frame"><iframe src="demo-behind.html" title="behind"></iframe></div>
+  </div>
+
+  <div class="state">
+    <h2>3 · הרצה ראשונה, ריק</h2>
+    <p>בלי יעדים, בלי שקילות, בלי מדידות. המצב שהכי קל לא להסתכל עליו.</p>
+    <div class="frame"><iframe src="demo-empty.html" title="empty"></iframe></div>
+  </div>
+</div>
+
+<div class="note">
+  <b>מה פתוח לשינוי בשלב הזה:</b>
+  <ul>
+    <li>הטבעת ופס השלבים — גודל, צבע, האם הזמן במרכז קריא</li>
+        <li>סדר הכרטיסים וצפיפותם — מה צריך להיות ראשון במסך</li>
+    <li>סקאלת הטיפוגרפיה ורינדור העברית</li>
+    <li>קריאות הגרף ברוחב 412 עם סימוני היעדים</li>
+    <li>ניגודיות הפלטה הכהה באור יום</li>
+  </ul>
+</div>
+</body>
+</html>

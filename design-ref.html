@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#101316;}
+  body{font-family:'Rubik',sans-serif;}
+  a{color:#7FB6E0;} a:hover{color:#A8CCEA;}
+  input::placeholder{color:#78828A;}
+</style>
+</helmet>
+<div dir="rtl" lang="he" style="min-height:100vh;background:#101316;display:flex;justify-content:center;padding:24px 0 64px;">
+<div style="width:412px;background:#14171A;color:#EDEAE0;font-family:'Rubik',sans-serif;display:flex;flex-direction:column;gap:12px;padding:0 14px 28px;">
+
+  <!-- Compact header -->
+  <div data-screen-label="ראשי" style="display:flex;align-items:center;justify-content:space-between;padding:14px 2px 2px;">
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <div style="font-size:17px;font-weight:700;letter-spacing:0.2px;color:#EDEAE0;">FastTrack</div>
+      <div style="font-size:12px;color:#A8B0B6;">יום שלישי · 11.8</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;background:#1D2226;border:1px solid #2E353B;border-radius:999px;padding:4px 10px;">
+      <span style="width:7px;height:7px;border-radius:50%;background:#7FC79B;"></span>
+      <span style="font-size:12px;font-weight:500;color:#7FC79B;">בצום</span>
+    </div>
+  </div>
+
+  <!-- Fasting hero: compact ring + phase info beside it -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="position:relative;width:124px;height:124px;flex-shrink:0;">
+        <svg width="124" height="124" viewBox="0 0 124 124">
+          <circle cx="62" cy="62" r="52" fill="none" stroke="#2E353B" stroke-width="9"></circle>
+          <circle cx="62" cy="62" r="52" fill="none" stroke="#E0B75C" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="{{ ringDash }}" transform="rotate(-90 62 62)"></circle>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;">
+          <div style="font-size:18px;font-weight:600;letter-spacing:0.3px;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;color:#EDEAE0;">{{ elapsed }}</div>
+          <div style="font-size:11px;color:#A8B0B6;">מתוך <span style="direction:ltr;unicode-bidi:isolate;">{{ targetH }}</span> שע׳</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
+        <div style="font-size:11px;font-weight:500;letter-spacing:1px;color:#78828A;">שלב נוכחי</div>
+        <div style="font-size:18px;font-weight:600;color:#E0B75C;line-height:1.25;">{{ phaseLabel }}</div>
+        <div style="font-size:13px;color:#A8B0B6;line-height:1.5;">לשלב הבא ({{ nextPhaseLabel }}) בעוד <span style="font-weight:500;color:#EDEAE0;direction:ltr;unicode-bidi:isolate;">{{ toNext }}</span></div>
+        <div style="font-size:12px;color:#78828A;">התחלה אתמול ב־<span style="direction:ltr;unicode-bidi:isolate;">{{ startClock }}</span> · פרוטוקול <span style="direction:ltr;unicode-bidi:isolate;">{{ protocolName }}</span></div>
+      </div>
+    </div>
+    <!-- 7-segment phase strip -->
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;gap:3px;height:8px;direction:ltr;">
+        <sc-for list="{{ segs }}" as="s" hint-placeholder-count="7">
+          <div style="flex:{{ s.flex }};border-radius:4px;background:{{ s.bg }};position:relative;overflow:hidden;">
+            <sc-if value="{{ s.fillPct }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;width:{{ s.fillPct }};background:#E0B75C;border-radius:4px;"></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#78828A;direction:ltr;">
+        <span>0h</span><span>4</span><span>12</span><span>16</span><span>24</span><span>36</span><span style="unicode-bidi:isolate;direction:ltr;">72h+</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onClick="{{ noop }}" style="flex:1;background:#252B30;border:1px solid #2E353B;color:#EDEAE0;font-family:'Rubik',sans-serif;font-size:14px;font-weight:500;border-radius:10px;padding:11px;cursor:pointer;" style-hover="background:#2E353B;">סיום צום</button>
+      <button onClick="{{ noop }}" style="background:#252B30;border:1px solid #2E353B;color:#A8B0B6;font-family:'Rubik',sans-serif;font-size:14px;border-radius:10px;padding:11px 16px;cursor:pointer;" style-hover="background:#2E353B;">עריכת התחלה</button>
+    </div>
+  </div>
+
+  <!-- Live status -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;">
+      <div style="font-size:15px;font-weight:600;">מה קורה עכשיו בגוף</div>
+      <div style="font-size:11px;color:#78828A;">גבולות טיפוסיים, לא אישיים</div>
+    </div>
+    <sc-for list="{{ statusBlocks }}" as="b" hint-placeholder-count="5">
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.8px;color:#E0B75C;">{{ b.k }}</div>
+        <div style="font-size:13.5px;color:#EDEAE0;line-height:1.6;">{{ b.v }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- Phase guide (collapsible) -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <button onClick="{{ toggleGuide }}" style="display:flex;align-items:center;justify-content:space-between;background:none;border:none;color:#EDEAE0;font-family:'Rubik',sans-serif;font-size:15px;font-weight:600;padding:0;cursor:pointer;">
+      <span>מדריך השלבים</span>
+      <span style="font-size:12px;color:#78828A;font-weight:400;">{{ guideToggleLabel }}</span>
+    </button>
+    <sc-if value="{{ guideOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <sc-for list="{{ guidePhases }}" as="p" hint-placeholder-count="7">
+          <div style="display:flex;gap:10px;align-items:baseline;padding:8px 10px;border-radius:10px;background:{{ p.bg }};border:1px solid {{ p.border }};">
+            <span style="font-size:12px;color:#78828A;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;white-space:nowrap;">{{ p.range }}</span>
+            <span style="font-size:13.5px;font-weight:{{ p.weight }};color:{{ p.color }};">{{ p.label }}{{ p.nowTag }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- Next goal -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <div style="font-size:15px;font-weight:600;">פריז · <span style="direction:ltr;unicode-bidi:isolate;">18.9.2026</span></div>
+        <div style="font-size:12px;color:#A8B0B6;">יעד <span style="direction:ltr;unicode-bidi:isolate;">70.0</span> ק״ג · עוד <span style="font-weight:500;color:#EDEAE0;direction:ltr;unicode-bidi:isolate;">38</span> ימים</div>
+      </div>
+      <div style="background:rgba(127,199,155,0.12);border:1px solid rgba(127,199,155,0.4);color:#7FC79B;font-size:12px;font-weight:600;border-radius:999px;padding:5px 12px;">בקצב</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <div style="background:#252B30;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px;align-items:center;">
+        <div style="font-size:11px;color:#A8B0B6;">נדרש</div>
+        <div style="font-size:16px;font-weight:600;direction:ltr;unicode-bidi:isolate;">0.79</div>
+        <div style="font-size:10px;color:#78828A;">ק״ג/שבוע</div>
+      </div>
+      <div style="background:#252B30;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px;align-items:center;">
+        <div style="font-size:11px;color:#A8B0B6;">בפועל</div>
+        <div style="font-size:16px;font-weight:600;color:#7FC79B;direction:ltr;unicode-bidi:isolate;">0.75</div>
+        <div style="font-size:10px;color:#78828A;">ק״ג/שבוע · 21 יום</div>
+      </div>
+      <div style="background:#252B30;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px;align-items:center;">
+        <div style="font-size:11px;color:#A8B0B6;">צפי ליעד</div>
+        <div style="font-size:16px;font-weight:600;direction:ltr;unicode-bidi:isolate;">70.2</div>
+        <div style="font-size:10px;color:#78828A;">ק״ג</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat tiles -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+    <div style="background:#1D2226;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:3px;">
+      <div style="font-size:11px;color:#A8B0B6;">משקל</div>
+      <div style="font-size:19px;font-weight:600;direction:ltr;unicode-bidi:isolate;">74.3</div>
+      <div style="font-size:11px;color:#7FC79B;direction:ltr;unicode-bidi:isolate;">-1.7</div>
+    </div>
+    <div style="background:#1D2226;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:3px;">
+      <div style="font-size:11px;color:#A8B0B6;">מותן</div>
+      <div style="font-size:19px;font-weight:600;direction:ltr;unicode-bidi:isolate;">84.0</div>
+      <div style="font-size:11px;color:#7FC79B;direction:ltr;unicode-bidi:isolate;">-2.5</div>
+    </div>
+    <div style="background:#1D2226;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:3px;">
+      <div style="font-size:11px;color:#A8B0B6;">ירך</div>
+      <div style="font-size:19px;font-weight:600;direction:ltr;unicode-bidi:isolate;">57.4</div>
+      <div style="font-size:11px;color:#7FC79B;direction:ltr;unicode-bidi:isolate;">-0.8</div>
+    </div>
+  </div>
+  <div style="background:#1D2226;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;">
+    <span style="width:8px;height:8px;border-radius:50%;background:#7FC79B;flex-shrink:0;"></span>
+    <div style="font-size:12.5px;color:#A8B0B6;line-height:1.5;">המותן יורד יחד עם המשקל — הירידה נראית כשומן, לא רק מים. מבוסס על <span style="direction:ltr;unicode-bidi:isolate;">4</span> מדידות לפי פרוטוקול.</div>
+  </div>
+
+  <!-- Chart -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;">
+      <div style="font-size:15px;font-weight:600;">מגמת משקל</div>
+      <div style="font-size:11px;color:#78828A;"><span style="direction:ltr;unicode-bidi:isolate;">21</span> ימים אחרונים</div>
+    </div>
+    <div style="position:relative;height:150px;">
+      <svg width="100%" height="150" viewBox="0 0 380 150" preserveAspectRatio="none" style="direction:ltr;">
+        <line x1="0" y1="128" x2="380" y2="128" stroke="#C9A24B" stroke-width="1" stroke-dasharray="4 4"></line>
+        <path d="M8,28 L380,120" stroke="#78828A" stroke-width="1.2" stroke-dasharray="2 4" fill="none"></path>
+        <path d="M8,24 C80,30 150,44 220,58 C280,70 340,82 372,88" stroke="#E0B75C" stroke-width="2" fill="none"></path>
+        <path d="M372,88 L380,90" stroke="#E0B75C" stroke-width="2" stroke-dasharray="3 3" fill="none"></path>
+        <circle cx="8" cy="22" r="3" fill="#EDEAE0"></circle><circle cx="46" cy="30" r="3" fill="#EDEAE0"></circle><circle cx="84" cy="26" r="3" fill="#EDEAE0"></circle><circle cx="122" cy="40" r="3" fill="#EDEAE0"></circle><circle cx="160" cy="46" r="3" fill="#EDEAE0"></circle><circle cx="198" cy="52" r="3" fill="#EDEAE0"></circle><circle cx="236" cy="64" r="3" fill="#EDEAE0"></circle><circle cx="274" cy="70" r="3" fill="#EDEAE0"></circle><circle cx="312" cy="80" r="3" fill="#EDEAE0"></circle><circle cx="350" cy="84" r="3" fill="#EDEAE0"></circle>
+      </svg>
+      <div style="position:absolute;left:4px;bottom:14px;font-size:10px;color:#C9A24B;background:#1D2226;padding:0 4px;">יעד פריז · <span style="direction:ltr;unicode-bidi:isolate;">70.0</span></div>
+      <div style="position:absolute;right:4px;top:6px;font-size:10px;color:#A8B0B6;background:#1D2226;padding:0 4px;"><span style="direction:ltr;unicode-bidi:isolate;">76.0</span></div>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#A8B0B6;">
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:#EDEAE0;"></span>שקילות</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:2px;background:#E0B75C;"></span>מגמה</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:0;border-top:2px dashed #78828A;"></span>קצב נדרש</span>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;">
+    <div style="font-size:15px;font-weight:600;">רישום</div>
+    <div style="display:flex;gap:8px;">
+      <input type="number" placeholder="משקל, ק״ג" style="flex:1;background:#252B30;border:1px solid #2E353B;color:#EDEAE0;font-family:'Rubik',sans-serif;font-size:14px;border-radius:10px;padding:10px 12px;direction:ltr;text-align:right;outline:none;">
+      <button onClick="{{ noop }}" style="background:#E0B75C;border:none;color:#14171A;font-family:'Rubik',sans-serif;font-size:14px;font-weight:600;border-radius:10px;padding:10px 18px;cursor:pointer;" style-hover="background:#EAC77A;">שמירה</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <sc-for list="{{ recentWeights }}" as="w" hint-placeholder-count="3">
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 2px;border-bottom:1px solid #252B30;">
+          <span style="color:#A8B0B6;">{{ w.d }}</span>
+          <span style="display:flex;gap:10px;"><span style="font-weight:500;direction:ltr;unicode-bidi:isolate;">{{ w.kg }}</span><span style="color:{{ w.deltaColor }};direction:ltr;unicode-bidi:isolate;">{{ w.delta }}</span></span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;color:#78828A;line-height:1.6;">מדידת היקפים שבועית — בבוקר, בצום, לפני שתייה. הפרוטוקול המלא מוצג בכל רישום.</div>
+  </div>
+
+  <!-- Goals -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:15px;font-weight:600;">יעדים</div>
+      <button onClick="{{ noop }}" style="background:none;border:none;color:#7FB6E0;font-family:'Rubik',sans-serif;font-size:13px;cursor:pointer;padding:0;">+ הוספה</button>
+    </div>
+    <sc-for list="{{ goals }}" as="g" hint-placeholder-count="2">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252B30;">
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <span style="font-size:14px;font-weight:500;">{{ g.label }}</span>
+          <span style="font-size:11.5px;color:#78828A;direction:ltr;unicode-bidi:isolate;">{{ g.date }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:14px;font-weight:500;direction:ltr;unicode-bidi:isolate;">{{ g.kg }}</span>
+          <span style="font-size:11px;color:{{ g.badgeColor }};border:1px solid {{ g.badgeColor }};border-radius:999px;padding:2px 8px;">{{ g.badge }}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- Fast history -->
+  <div style="background:#1D2226;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <div style="font-size:15px;font-weight:600;">היסטוריית צומות</div>
+    <div style="display:flex;gap:8px;">
+      <div style="flex:1;background:#252B30;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:600;direction:ltr;unicode-bidi:isolate;">6</div><div style="font-size:10.5px;color:#A8B0B6;">רצף ימים</div></div>
+      <div style="flex:1;background:#252B30;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:600;direction:ltr;unicode-bidi:isolate;">19:42</div><div style="font-size:10.5px;color:#A8B0B6;">הכי ארוך</div></div>
+      <div style="flex:1;background:#252B30;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:600;direction:ltr;unicode-bidi:isolate;">16:18</div><div style="font-size:10.5px;color:#A8B0B6;">ממוצע שבועי</div></div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#78828A;text-align:center;line-height:1.7;padding:4px 12px 0;">גבולות השלבים הם ערכים טיפוסיים ואינם אישיים. אינו ייעוץ רפואי.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;440px&quot;,&quot;height&quot;:&quot;920px&quot;},&quot;startedHoursAgo&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:14,&quot;min&quot;:0,&quot;max&quot;:30,&quot;step&quot;:0.5,&quot;unit&quot;:&quot;h&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;מצב הצום&quot;},&quot;protocolHours&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:16,&quot;options&quot;:[16,18,20],&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;מצב הצום&quot;}}">
+class Component extends DCLogic {
+  state = { now: Date.now(), guideOpen: false };
+  componentDidMount() {
+    this._t = setInterval(() => this.setState({ now: Date.now() }), 1000);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const PHASES = [
+      { from: 0, to: 4, label: "עיכול וספיגה" },
+      { from: 4, to: 12, label: "שריפת גליקוגן" },
+      { from: 12, to: 16, label: "המעבר לשריפת שומן" },
+      { from: 16, to: 24, label: "קטוזיס מוקדם" },
+      { from: 24, to: 36, label: "קטוזיס עמוק" },
+      { from: 36, to: 72, label: "צום ממושך" },
+      { from: 72, to: 96, label: "צום מורחב מאוד" }
+    ];
+    const targetH = this.props.protocolHours ?? 16;
+    const startedH = this.props.startedHoursAgo ?? 14;
+    const startMs = this._start ?? (this._start = Date.now() - startedH * 3600e3);
+    const elapsedMs = this.state.now - startMs;
+    const h = Math.floor(elapsedMs / 3600e3), m = Math.floor(elapsedMs / 60e3) % 60, s = Math.floor(elapsedMs / 1e3) % 60;
+    const p2 = n => String(n).padStart(2, "0");
+    const elapsedH = elapsedMs / 3600e3;
+    const pi = Math.max(0, PHASES.findIndex(p => elapsedH >= p.from && elapsedH < p.to));
+    const phase = PHASES[pi], next = PHASES[pi + 1] || null;
+    const toNextMs = next ? (phase.to * 3600e3 - elapsedMs) : 0;
+    const tnH = Math.floor(toNextMs / 3600e3), tnM = Math.floor(toNextMs / 60e3) % 60;
+    const C = 2 * Math.PI * 52;
+    const pct = Math.min(1, elapsedMs / (targetH * 3600e3));
+    const segs = PHASES.map((p, i) => {
+      const done = elapsedH >= p.to, cur = i === pi;
+      let fillPct = false;
+      if (cur) fillPct = Math.round(((elapsedH - p.from) / (p.to - p.from)) * 100) + "%";
+      return {
+        flex: String(Math.sqrt(p.to - p.from)),
+        bg: done ? "#C9A24B" : "#2E353B",
+        fillPct
+      };
+    });
+    const stD = new Date(startMs);
+    const statusBlocks = [
+      { k: "מה קורה", v: "מאגרי הגליקוגן מתרוקנים והגוף עובר להסתמך על שומן. זה השלב שבו המתג המטבולי מתהפך." },
+      { k: "דלק", v: "חומצות שומן חופשיות שמשתחררות מרקמת השומן." },
+      { k: "הורמונים", v: "אינסולין נמוך, נוראדרנלין עולה — לכן דווקא עכשיו לפעמים יש יותר ערנות ולא פחות." },
+      { k: "תחושה", v: "הרעב הכי בולט בשלב הזה. ייתכן כאב ראש קל, עצבנות או קושי בריכוז." },
+      { k: "מה עוזר", v: "כאן חשוב מלח. גליקוגן קושר מים, וכשהוא מתרוקן הגוף מפריש נתרן — רוב מה שנקרא \"כאב ראש של צום\" הוא בעצם חוסר נתרן. קורט מלח במים עוזר." }
+    ];
+    const guidePhases = PHASES.map((p, i) => ({
+      range: (p.to >= 96 ? "72h+" : p.from + "–" + p.to + "h"),
+      label: p.label,
+      nowTag: i === pi ? " · עכשיו" : "",
+      bg: i === pi ? "rgba(224,183,92,0.08)" : "transparent",
+      border: i === pi ? "rgba(224,183,92,0.35)" : "#252B30",
+      color: i === pi ? "#E0B75C" : "#EDEAE0",
+      weight: i === pi ? "600" : "400"
+    }));
+    return {
+      elapsed: p2(h) + ":" + p2(m) + ":" + p2(s),
+      targetH,
+      protocolName: targetH + ":" + (24 - targetH),
+      ringDash: (C * pct).toFixed(1) + " " + C.toFixed(1),
+      phaseLabel: phase.label,
+      nextPhaseLabel: next ? next.label : "—",
+      toNext: tnH + ":" + p2(tnM),
+      startClock: p2(stD.getHours()) + ":" + p2(stD.getMinutes()),
+      segs, statusBlocks, guidePhases,
+      guideOpen: this.state.guideOpen,
+      guideToggleLabel: this.state.guideOpen ? "סגירה ▲" : "כל 7 השלבים ▼",
+      toggleGuide: () => this.setState(s => ({ guideOpen: !s.guideOpen })),
+      noop: () => {},
+      recentWeights: [
+        { d: "היום, בוקר", kg: "74.3", delta: "-0.2", deltaColor: "#7FC79B" },
+        { d: "אתמול", kg: "74.5", delta: "+0.1", deltaColor: "#F08B70" },
+        { d: "9.8", kg: "74.4", delta: "-0.3", deltaColor: "#7FC79B" }
+      ],
+      goals: [
+        { label: "פריז", date: "18.9.2026", kg: "70.0", badge: "פעיל", badgeColor: "#E0B75C" },
+        { label: "יעד ארוך", date: "31.12.2026", kg: "66.0", badge: "עתידי", badgeColor: "#78828A" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
