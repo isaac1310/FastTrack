@@ -426,6 +426,29 @@ function compositionSignal(weights, measures) {
   };
 }
 
+/* One weigh-in per day, always. Returns a NEW sorted array plus whatever it
+ * displaced, so the caller can offer an undo. Two rows on one date would be
+ * double-counted by the trend fit, so this invariant is enforced in one place
+ * rather than at each call site. */
+function upsertWeight(weights, date, kg) {
+  var list = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg); });
+  var replaced = list.filter(function (w) { return w.date === date; })[0] || null;
+  var next = list.filter(function (w) { return w.date !== date; });
+  next.push({ date: date, kg: +Number(kg).toFixed(1) });
+  next.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  return { weights: next, replaced: replaced ? { date: replaced.date, kg: replaced.kg } : null };
+}
+
+/* Move an entry to a different date and/or value. Landing on an occupied date
+ * merges into it — the model has no representation for two entries on one day. */
+function moveWeight(weights, fromDate, toDate, kg) {
+  var without = (weights || []).filter(function (w) { return w && w.date !== fromDate; });
+  var r = upsertWeight(without, toDate, kg);
+  return { weights: r.weights, merged: !!r.replaced };
+}
+
+function isFutureDate(dateStr, todayStr) { return dateStr > (todayStr || todayISO()); }
+
 var WAIST_JUMP_CM = 3;
 function implausibleWaistDelta(prevWaist, nextWaist) {
   if (!isFinite(prevWaist) || !isFinite(nextWaist)) return false;
@@ -514,6 +537,7 @@ window.FT = {
   goalOutcome: goalOutcome, compositionSignal: compositionSignal,
   implausibleWaistDelta: implausibleWaistDelta, trendSlopePerDay: trendSlopePerDay,
   trendFit: trendFit, loadDoc: loadDoc, saveDoc: saveDoc,
+  upsertWeight: upsertWeight, moveWeight: moveWeight, isFutureDate: isFutureDate,
   getPhase: getPhase, phaseIndex: phaseIndex, timeToNextPhase: timeToNextPhase,
   fastStats: fastStats, migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
   daysBetween: daysBetween, todayISO: todayISO, bmi: bmi, fmtDur: fmtDur,
