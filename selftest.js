@@ -252,6 +252,113 @@
       return eq(sm[0].date, "2026-07-15", "earliest point after backfill");
     });
 
+    /* ================= intake ================= */
+    group("intake");
+    check("black coffee does not break a fast; milk/sugar, alcohol and meat do", function () {
+      if (FT.breaksFast("coffeeBlack") !== false) return "black coffee marked as breaking a fast";
+      if (FT.breaksFast("coffeeMilk") !== true) return "coffee with milk marked as fasting-safe";
+      if (FT.breaksFast("alcohol") !== true) return "alcohol marked as fasting-safe";
+      if (FT.breaksFast("meat") !== true) return "meat marked as fasting-safe";
+      return true;
+    });
+    check("an unknown item is a no-op, not a crash", function () {
+      var r = FT.upsertIntake([], "2026-08-11", "kombucha", 3);
+      return r.changed === false && r.intake.length === 0 ? true : "unknown key was accepted";
+    });
+    check("one intake row per day, repeated writes replace", function () {
+      var ik = [];
+      ik = FT.upsertIntake(ik, "2026-08-11", "alcohol", 2).intake;
+      ik = FT.upsertIntake(ik, "2026-08-11", "coffeeBlack", 3).intake;
+      ik = FT.upsertIntake(ik, "2026-08-11", "alcohol", 1).intake;
+      if (ik.length !== 1) return "expected 1 row, got " + ik.length;
+      return ik[0].alcohol === 1 && ik[0].coffeeBlack === 3
+        ? true : "wrong values: " + JSON.stringify(ik[0]);
+    });
+    check("counts never go negative", function () {
+      var ik = FT.upsertIntake([], "2026-08-11", "alcohol", -5).intake;
+      return eq(ik[0].alcohol, 0, "alcohol");
+    });
+    check("does not mutate the array it was given", function () {
+      var ik = [{ date: "2026-08-11", coffeeBlack: 1, coffeeMilk: 0, alcohol: 0, meat: 0 }];
+      FT.upsertIntake(ik, "2026-08-11", "coffeeBlack", 9);
+      return eq(ik[0].coffeeBlack, 1, "original row");
+    });
+    check("intakeOn returns a zeroed row for a day with nothing logged", function () {
+      var r = FT.intakeOn([], "2026-08-11");
+      var allZero = FT.INTAKE_ITEMS.every(function (it) { return r[it.key] === 0; });
+      return allZero ? true : "got " + JSON.stringify(r);
+    });
+    check("totals respect the date window", function () {
+      var ik = [];
+      ik = FT.upsertIntake(ik, "2026-08-01", "alcohol", 3).intake;
+      ik = FT.upsertIntake(ik, "2026-08-10", "alcohol", 2).intake;
+      var t = FT.intakeTotals(ik, "2026-08-05", "2026-08-31");
+      return eq(t.alcohol, 2, "windowed total");
+    });
+    check("weekStart is Monday-based and stable across a week", function () {
+      // 2026-08-10 is a Monday
+      if (FT.weekStart("2026-08-10") !== "2026-08-10") return "Monday did not map to itself";
+      if (FT.weekStart("2026-08-16") !== "2026-08-10") return "Sunday mapped to the wrong week";
+      if (FT.weekStart("2026-08-17") !== "2026-08-17") return "next Monday did not start a new week";
+      return true;
+    });
+
+    group("intakeObservation");
+    check("refuses below 4 weeks and says how many it has", function () {
+      var r = FT.intakeObservation(series(76, -0.13, 10), []);
+      return r.status === "insufficient" && /\d/.test(r.reason)
+        ? true : "expected a refusal with a count, got " + JSON.stringify(r);
+    });
+    check("refuses with no weights at all", function () {
+      return eq(FT.intakeObservation([], []).status, "insufficient", "status");
+    });
+    check("reports 'nodata' when there are weeks but nothing logged", function () {
+      return eq(FT.intakeObservation(series(76, -0.13, 40), []).status, "nodata", "status");
+    });
+    check("pairs each week's totals with that week's weight change", function () {
+      var w = series(76, -0.13, 40);
+      var ik = [];
+      w.forEach(function (x, i) { ik = FT.upsertIntake(ik, x.date, "alcohol", i < 7 ? 3 : 0).intake; });
+      var r = FT.intakeObservation(w, ik);
+      if (r.status !== "ok") return "expected ok, got " + r.status + " (" + r.reason + ")";
+      var firstWeek = r.all[0];
+      if (firstWeek.totals.alcohol <= 0) return "first week lost its alcohol total";
+      var later = r.all[r.all.length - 1];
+      return later.totals.alcohol === 0 ? true : "a later week picked up totals it should not have";
+    });
+    check("never claims causation — no correlation coefficient is exposed", function () {
+      var w = series(76, -0.13, 40);
+      var ik = [];
+      w.forEach(function (x) { ik = FT.upsertIntake(ik, x.date, "alcohol", 2).intake; });
+      var r = FT.intakeObservation(w, ik);
+      var blob = JSON.stringify(r);
+      return /\br\b\s*[:=]|correlat|causal|because/i.test(blob)
+        ? "the observation object implies causation" : true;
+    });
+
+    group("intake content");
+    check("every item has all four explanatory fields", function () {
+      for (var i = 0; i < FT.INTAKE_ITEMS.length; i++) {
+        var it = FT.INTAKE_ITEMS[i];
+        var keys = ["now", "fasting", "effect", "timing"];
+        for (var k = 0; k < keys.length; k++) {
+          if (!it[keys[k]] || !String(it[keys[k]]).trim()) {
+            return "'" + it.label + "' has empty " + keys[k] + " — would render blank";
+          }
+        }
+      }
+      return true;
+    });
+    check("alcohol copy names the fat-oxidation effect, which is the point of tracking it", function () {
+      var a = FT.intakeItem("alcohol");
+      return /חמצון השומן|שריפת/.test(a.effect) ? true : "alcohol effect copy lost its substance";
+    });
+    check("meat copy carries the contested-evidence caveat rather than moralising", function () {
+      var m = FT.intakeItem("meat");
+      return m.caution && /מחלוקת|מעובד/.test(m.caution)
+        ? true : "meat caveat missing — the health claims must not be stated flatly";
+    });
+
     /* ================= composition ================= */
     group("compositionSignal");
     var W3 = series(76, -0.13, 22);
@@ -416,6 +523,22 @@
     check("unparseable JSON refuses rather than wiping", function () {
       var r = FT.migrate("{not json", null, null);
       return r.doc === null && r.error ? true : "expected a refusal";
+    });
+    check("a stored v2 doc UPGRADES in place, keeping its data", function () {
+      // v3 added intake purely additively; refusing a v2 doc would strand
+      // every weigh-in already on the phone
+      var v2 = JSON.stringify({
+        schemaVersion: 2,
+        weights: [{ date: "2026-08-01", kg: 76 }],
+        goals: [{ id: "g", date: "2026-09-18", targetKg: 70, deletedAt: null }],
+        measures: [], fastHistory: []
+      });
+      var r = FT.migrate(v2, null, null);
+      if (!r.doc) return "v2 doc was refused: " + r.error;
+      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "schemaVersion not bumped";
+      if (r.doc.weights.length !== 1) return "weights lost in upgrade";
+      if (r.doc.goals.length !== 1) return "goals lost in upgrade";
+      return Array.isArray(r.doc.intake) ? true : "intake array not added";
     });
     check("a current-version doc round-trips unchanged", function () {
       var d = FT.emptyDoc();

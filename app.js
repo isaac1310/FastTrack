@@ -4,9 +4,9 @@
  */
 "use strict";
 
-var APP_VERSION = "2.1.0";
+var APP_VERSION = "2.2.0";
 var LS_KEY = "fasttrack.doc";
-var SCHEMA_VERSION = 2;
+var SCHEMA_VERSION = 3;
 
 /* ============================================================ *
  *  Fasting phases
@@ -82,6 +82,60 @@ var PHASES = [
 
 var REFEED_NOTE = "אחרי צום ארוך: לשבור בקטן. משהו קל וקטן, לחכות 20–30 דקות, ורק אז ארוחה רגילה. ארוחה גדולה מיד בסוף צום ארוך היא החלק שהכי מרבים לטעות בו.";
 
+
+/* ============================================================ *
+ *  Intake — coffee, alcohol, meat
+ *
+ *  Only three items, deliberately. This is not calorie tracking; it is
+ *  three flags that can explain a stalled week, which weight and fasting
+ *  hours alone cannot.
+ *
+ *  Content rule, same as PHASES: state what is established, and say so when
+ *  it is not. Caffeine and alcohol have specific, well-replicated physiology.
+ *  Meat beyond protein satiety and thermic effect is contested — so it is
+ *  not padded out, and it is not moralised.
+ * ============================================================ */
+var INTAKE_ITEMS = [
+  {
+    key: "coffeeBlack", label: "קפה שחור", unit: "כוסות", breaksFast: false,
+    now: "קפאין חוסם קולטני אדנוזין — לא מוסיף אנרגיה, רק מסתיר את תחושת העייפות עד שהוא מתפוגג.",
+    fasting: "כוס קפה שחור היא בערך 2 קלוריות. היא לא שוברת צום, וגם תה ירוק או שחור בלי סוכר וחלב לא.",
+    effect: "מעלה קלות את קצב חילוף החומרים וחמצון השומן לטווח קצר. ההשפעה אמיתית אבל צנועה, ונחלשת עם סבילות.",
+    timing: "זמן מחצית החיים של קפאין הוא כ-5 שעות, ומשתנה מאוד בין אנשים (בערך 3–7). קפה של אחר הצהריים עדיין פעיל בגוף בלילה ופוגע בשינה העמוקה — גם אצל מי שנרדם בלי בעיה.",
+    caution: null
+  },
+  {
+    key: "coffeeMilk", label: "קפה עם חלב/סוכר", unit: "כוסות", breaksFast: true,
+    now: "מה שמוסיפים לקפה הוא מה שקובע. חלב וסוכר מכניסים קלוריות ומעלים אינסולין.",
+    fasting: "שובר את הצום. הקפה עצמו לא הבעיה — התוספת כן.",
+    effect: "קפה הפוך גדול יכול להיות ארוחה קטנה מבחינת קלוריות, בלי תחושת השובע של ארוחה.",
+    timing: "אותה השפעה של קפאין על השינה כמו קפה שחור.",
+    caution: null
+  },
+  {
+    key: "alcohol", label: "אלכוהול", unit: "מנות", breaksFast: true,
+    now: "הגוף מתייחס לאלכוהול כאל רעל ונותן לפינוי שלו עדיפות על כל דלק אחר.",
+    fasting: "שובר את הצום.",
+    effect: "כל עוד יש אלכוהול בדם, חמצון השומן מדוכא — הגוף שורף את האלכוהול במקום את השומן. זו ההשפעה הישירה ביותר מבין השלושה על ירידה במשקל. בנוסף: 7 קלוריות לגרם, כמעט בלי ערך תזונתי, והוא מגביר תיאבון ומחליש שליטה על אכילה.",
+    timing: "מנה סטנדרטית היא כ-14 גרם אלכוהול — בערך פחית בירה, כוס יין קטנה או שוט. הגוף מפנה בערך מנה אחת בשעה. אלכוהול בערב פוגע במבנה השינה ומדכא שנת REM, גם כשהוא עוזר להירדם.",
+    caution: "המספרים כאן הם על ההשפעה המטבולית בלבד. שאלות של כמות בטוחה או תלות הן עניין לרופא, לא לאפליקציה."
+  },
+  {
+    key: "meat", label: "בשר", unit: "מנות", breaksFast: true,
+    now: "חלבון הוא המקרו־נוטריינט המשביע ביותר, ובעל האפקט התרמי הגבוה ביותר.",
+    fasting: "שובר את הצום.",
+    effect: "בערך 20–30% מהקלוריות שבחלבון נשרפות רק כדי לעכל אותו, לעומת 5–10% בפחמימות ו-0–3% בשומן. בגירעון קלורי חלבון מספיק הוא מה ששומר על מסת שריר — כלומר הוא בדיוק מה שגורם לירידה להיות בשומן ולא בשריר.",
+    timing: "אין תזמון מיוחד שחשוב למעקב הזה.",
+    caution: "מעבר לשובע ולאפקט התרמי, רוב הטענות הבריאותיות על בשר שנויות במחלוקת. העדויות על בשר מעובד חזקות יותר מאלה על בשר אדום לא מעובד. האפליקציה לא נוקטת עמדה מעבר לזה."
+  }
+];
+
+function intakeItem(key) {
+  for (var i = 0; i < INTAKE_ITEMS.length; i++) if (INTAKE_ITEMS[i].key === key) return INTAKE_ITEMS[i];
+  return null;
+}
+function breaksFast(key) { var it = intakeItem(key); return !!(it && it.breaksFast); }
+
 var MEASURE_PROTOCOL = [
   "בבוקר, בצום, אחרי השירותים, לפני שתייה.",
   "מותן בגובה הטבור, עמידה רגועה, נשיפה רגילה — בלי לשאוב פנימה.",
@@ -121,6 +175,7 @@ function emptyDoc() {
     goals: [],
     weights: [],
     measures: [],
+    intake: [],
     reminders: { weighIn: "08:00", measureWeekday: 0, enabled: false, permission: "default" },
     session: null,
     fastHistory: [],
@@ -146,6 +201,15 @@ function migrate(raw, v1entries, v1session) {
 
     if (parsed && parsed.schemaVersion === SCHEMA_VERSION) {
       return { doc: normalizeDoc(parsed), migrated: false };
+    }
+    /* v2 → v3: intake tracking added. Purely additive — every v2 field keeps
+       its meaning, so this upgrades in place rather than refusing. Anything
+       older than v2 that still has a schemaVersion is not something we ever
+       wrote, so it falls through to the refusal below. */
+    if (parsed && parsed.schemaVersion === 2) {
+      parsed.schemaVersion = SCHEMA_VERSION;
+      if (!Array.isArray(parsed.intake)) parsed.intake = [];
+      return { doc: normalizeDoc(parsed), migrated: true };
     }
     if (parsed && typeof parsed.schemaVersion === "number" && parsed.schemaVersion > SCHEMA_VERSION) {
       // Refuse rather than guess. Preserve the raw blob.
@@ -199,6 +263,7 @@ function normalizeDoc(d) {
   d.goals = Array.isArray(d.goals) ? d.goals : [];
   d.weights = Array.isArray(d.weights) ? d.weights : [];
   d.measures = Array.isArray(d.measures) ? d.measures : [];
+  d.intake = Array.isArray(d.intake) ? d.intake : [];
   d.fastHistory = Array.isArray(d.fastHistory) ? d.fastHistory : [];
   if (d.session && !isFinite(d.session.start)) d.session = null;
   return d;
@@ -449,6 +514,119 @@ function moveWeight(weights, fromDate, toDate, kg) {
 
 function isFutureDate(dateStr, todayStr) { return dateStr > (todayStr || todayISO()); }
 
+/* ---- intake ----
+ * One row per day holding a count per item. Returns a NEW array. */
+function emptyIntakeDay(date) {
+  var row = { date: date };
+  INTAKE_ITEMS.forEach(function (it) { row[it.key] = 0; });
+  return row;
+}
+
+function upsertIntake(intake, date, key, count) {
+  var it = intakeItem(key);
+  if (!it) return { intake: (intake || []).slice(), changed: false };
+  var c = Math.max(0, Math.round(Number(count) || 0));
+  var list = (intake || []).filter(function (r) { return r && r.date; }).map(function (r) {
+    return Object.assign({}, r);
+  });
+  var row = list.filter(function (r) { return r.date === date; })[0];
+  if (!row) { row = emptyIntakeDay(date); list.push(row); }
+  var before = row[key] || 0;
+  row[key] = c;
+  list.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  return { intake: list, changed: before !== c, before: before };
+}
+
+function intakeOn(intake, date) {
+  var row = (intake || []).filter(function (r) { return r && r.date === date; })[0];
+  return row || emptyIntakeDay(date);
+}
+
+function intakeTotals(intake, fromDate, toDate) {
+  var t = {};
+  INTAKE_ITEMS.forEach(function (it) { t[it.key] = 0; });
+  (intake || []).forEach(function (r) {
+    if (!r || !r.date) return;
+    if (fromDate && r.date < fromDate) return;
+    if (toDate && r.date > toDate) return;
+    INTAKE_ITEMS.forEach(function (it) { t[it.key] += Math.max(0, Number(r[it.key]) || 0); });
+  });
+  return t;
+}
+
+/* Monday-based week key, so a week is a week regardless of locale. */
+function weekStart(dateISO) {
+  var d = new Date(dateISO + "T12:00:00");
+  var dow = (d.getDay() + 6) % 7; // Mon=0
+  d.setDate(d.getDate() - dow);
+  return todayISO(d);
+}
+
+/* Weekly intake totals paired with the weight change over that same week.
+ *
+ * This deliberately does NOT compute a correlation coefficient or claim
+ * causation. With five weeks of data before Paris, n is far too small for
+ * either to mean anything, and a confident-looking number would be worse
+ * than no number. It lays the columns side by side and lets you look. */
+function intakeByWeek(weights, intake, maxWeeks) {
+  var ws = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg); });
+  if (!ws.length) return [];
+  var fit = trendFit(ws, null);
+  if (!fit) return [];
+
+  var weeks = {};
+  ws.forEach(function (w) {
+    var k = weekStart(w.date);
+    if (!weeks[k]) weeks[k] = { week: k, from: w.date, to: w.date };
+    if (w.date < weeks[k].from) weeks[k].from = w.date;
+    if (w.date > weeks[k].to) weeks[k].to = w.date;
+  });
+
+  var out = Object.keys(weeks).sort().map(function (k) {
+    var wk = weeks[k];
+    var end = todayISO(new Date(new Date(k + "T12:00:00").getTime() + 6 * 86400000));
+    // weekly weight change from a fit local to that week, so a single noisy
+    // weigh-in at a week boundary doesn't dominate the number
+    var inWeek = ws.filter(function (w) { return w.date >= k && w.date <= end; });
+    var f = inWeek.length >= 2 ? trendFit(inWeek, null) : null;
+    var delta = f ? +(f.slopePerDay * 7).toFixed(2) : null;
+    return {
+      week: k, weekEnd: end, points: inWeek.length,
+      deltaKg: delta,
+      totals: intakeTotals(intake, k, end)
+    };
+  });
+
+  if (isFinite(maxWeeks) && out.length > maxWeeks) out = out.slice(out.length - maxWeeks);
+  return out;
+}
+
+var INTAKE_MIN_WEEKS = 4;
+
+/* Refuses a read below INTAKE_MIN_WEEKS, same discipline as compositionSignal. */
+function intakeObservation(weights, intake) {
+  var weeks = intakeByWeek(weights, intake).filter(function (w) { return w.deltaKg !== null; });
+  if (weeks.length < INTAKE_MIN_WEEKS) {
+    return {
+      status: "insufficient",
+      weeks: weeks.length,
+      reason: "צריך לפחות " + INTAKE_MIN_WEEKS + " שבועות עם שקילות כדי להשוות בכלל (יש " + weeks.length + ")."
+    };
+  }
+  var any = weeks.some(function (w) {
+    return INTAKE_ITEMS.some(function (it) { return w.totals[it.key] > 0; });
+  });
+  if (!any) return { status: "nodata", weeks: weeks.length, reason: "עדיין לא רשמת צריכה." };
+
+  // best and worst week by weight change, for side-by-side display only
+  var sorted = weeks.slice().sort(function (a, b) { return a.deltaKg - b.deltaKg; });
+  return {
+    status: "ok", weeks: weeks.length,
+    best: sorted[0], worst: sorted[sorted.length - 1],
+    all: weeks
+  };
+}
+
 var WAIST_JUMP_CM = 3;
 function implausibleWaistDelta(prevWaist, nextWaist) {
   if (!isFinite(prevWaist) || !isFinite(nextWaist)) return false;
@@ -538,6 +716,10 @@ window.FT = {
   implausibleWaistDelta: implausibleWaistDelta, trendSlopePerDay: trendSlopePerDay,
   trendFit: trendFit, loadDoc: loadDoc, saveDoc: saveDoc,
   upsertWeight: upsertWeight, moveWeight: moveWeight, isFutureDate: isFutureDate,
+  INTAKE_ITEMS: INTAKE_ITEMS, intakeItem: intakeItem, breaksFast: breaksFast,
+  upsertIntake: upsertIntake, intakeOn: intakeOn, intakeTotals: intakeTotals,
+  intakeByWeek: intakeByWeek, intakeObservation: intakeObservation,
+  weekStart: weekStart, emptyIntakeDay: emptyIntakeDay,
   getPhase: getPhase, phaseIndex: phaseIndex, timeToNextPhase: timeToNextPhase,
   fastStats: fastStats, migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
   daysBetween: daysBetween, todayISO: todayISO, bmi: bmi, fmtDur: fmtDur,

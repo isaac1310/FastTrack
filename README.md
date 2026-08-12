@@ -14,12 +14,18 @@ device and leaves it only through a JSON export you trigger yourself.
 - **Body measurements** (waist + thigh) under a fixed protocol, used to separate
   fat loss from water and lean mass.
 - **Goals** — any number of dated weight milestones you can add, edit and delete.
+- **Intake** — daily counts for coffee, alcohol and meat, shown week-by-week
+  alongside that week's weight change, plus a reference on what each one does
+  to the body and whether it breaks a fast.
 - **Pace** — required vs. actual kg/week and a projection to the next goal.
 
 ## What it deliberately does not do
 
-Track food. It can tell you *that* progress stalled, never *why*. The pace card
-reports; it doesn't prescribe.
+Count calories. Intake tracking is three items, not a food diary — enough to
+notice that a stalled week had nine drinks in it, without the daily logging
+burden that gets abandoned by week two. The pace card reports; it doesn't
+prescribe, and the weekly table shows numbers side by side without claiming
+causation from a five-week sample.
 
 It also won't state an autophagy threshold hour as fact — human timing for that
 isn't established, and most numbers quoted online come from rodent studies. Phase
@@ -58,4 +64,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.1.0.md` | Human pass |
+| `tests/TEST-PLAN-v2.2.0.md` | Human pass |

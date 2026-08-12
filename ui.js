@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.1.0, post design review).
+/* FastTrack — UI layer (v2.2.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -24,10 +24,12 @@ var view = {
   chartAllGoals: false,
   editingWeightDate: null,
   showAllWeights: false,
+  showIntakeInfo: false,
+  intakeDate: null,
   showBackdate: false,
   backdateValue: null,
   bannerDismissed: {},
-  undo: null,
+  toastAction: null,
   undoTimer: null,
   toastMsg: null
 };
@@ -59,6 +61,17 @@ function seedDemo(kind) {
     { date: "2026-08-04", waistCm: 96.2, thighCm: 57.5, onProtocol: true },
     { date: "2026-08-09", waistCm: 99.0, thighCm: 57.4, onProtocol: false }
   ];
+  // intake: a heavier week in the middle, so the comparison table has something in it
+  var intakePattern = [
+    [2,0,0,1],[3,1,0,1],[2,0,2,0],[2,0,0,1],[3,0,1,1],[2,1,3,2],[1,0,4,1],
+    [2,0,0,1],[3,0,0,0],[2,1,1,1],[2,0,0,1],[3,0,2,1],[2,0,0,0],[2,0,1,1],
+    [3,0,0,1],[2,0,0,0],[2,1,0,1],[3,0,1,1],[2,0,0,1],[2,0,0,0],[3,0,1,1],[2,0,0,1]
+  ];
+  for (var j = 0; j < 22; j++) {
+    var idt = new Date(start); idt.setDate(idt.getDate() + j);
+    var pat = intakePattern[j];
+    d.intake.push({ date: FT.todayISO(idt), coffeeBlack: pat[0], coffeeMilk: pat[1], alcohol: pat[2], meat: pat[3] });
+  }
   var now = Date.now();
   d.fastHistory = [
     { start: now - 4 * 86400000 - 17 * 3600000, end: now - 4 * 86400000, protocolHours: 16 },
@@ -159,22 +172,31 @@ function toLocalInput(ts) {
 }
 function protocolName(h) { return h ? h + ":" + (24 - h) : "ללא יעד"; }
 
-function showToast(msg, undoFn) {
-  view.toastMsg = msg; view.undo = undoFn || null;
+/* action is either a function (an undo, labelled "ביטול") or
+   {label, fn} for anything else — e.g. offering to end a broken fast. */
+function showToast(msg, action) {
+  view.toastMsg = msg;
+  view.toastAction = typeof action === "function"
+    ? { label: "ביטול", fn: action }
+    : (action || null);
   clearTimeout(view.undoTimer);
-  view.undoTimer = setTimeout(function () { view.toastMsg = null; view.undo = null; renderToast(); }, 10000);
+  view.undoTimer = setTimeout(function () {
+    view.toastMsg = null; view.toastAction = null; renderToast();
+  }, 10000);
   renderToast();
 }
 function renderToast() {
   var el = document.getElementById("toast");
   if (!view.toastMsg) { el.innerHTML = ""; return; }
+  var a = view.toastAction;
   el.innerHTML = '<div class="toastBox"><div class="toast"><span>' + esc(view.toastMsg) + '</span>' +
-    (view.undo ? '<button class="btn" style="padding:7px 12px" id="undoBtn">ביטול</button>' : '') +
+    (a ? '<button class="btn" style="padding:7px 12px;flex:0 0 auto" id="toastActionBtn">' + esc(a.label) + '</button>' : '') +
     '</div></div>';
-  var b = document.getElementById("undoBtn");
+  var b = document.getElementById("toastActionBtn");
   if (b) b.onclick = function () {
-    if (view.undo) view.undo();
-    view.toastMsg = null; view.undo = null; clearTimeout(view.undoTimer);
+    var fn = view.toastAction && view.toastAction.fn;
+    view.toastMsg = null; view.toastAction = null; clearTimeout(view.undoTimer);
+    if (fn) fn();
     persist(); render();
   };
 }
@@ -642,6 +664,127 @@ function logCard() {
 }
 
 /* ============================================================ *
+ *  Intake — coffee, alcohol, meat
+ * ============================================================ */
+function intakeCard() {
+  var date = view.intakeDate || FT.todayISO();
+  var isToday = date === FT.todayISO();
+  var row = FT.intakeOn(doc.intake, date);
+
+  var html = '<div class="card"><div class="cardHead" style="align-items:center">' +
+    '<div class="cardTitle">צריכה</div>' +
+    '<div style="display:flex;gap:10px;align-items:center">' +
+    (isToday ? '' : '<button class="linkBtn" id="intakeToday">היום</button>') +
+    '<input type="date" id="intakeDate" value="' + esc(date) + '" max="' + FT.todayISO() +
+    '" style="width:150px;padding:6px 8px;font-size:13px"/></div></div>';
+
+  html += '<div class="rows">';
+  FT.INTAKE_ITEMS.forEach(function (it) {
+    var c = Math.max(0, Number(row[it.key]) || 0);
+    html += '<div class="row" style="padding:8px 2px">' +
+      '<span style="display:flex;flex-direction:column;gap:1px;min-width:0">' +
+      '<span style="font-size:14px;font-weight:500">' + esc(it.label) + '</span>' +
+      '<span style="font-size:11px;color:var(--dim)">' + esc(it.unit) +
+      (it.breaksFast ? ' · שובר צום' : ' · לא שובר צום') + '</span></span>' +
+      '<span class="stepper">' +
+      '<button class="stepBtn" data-intake-dec="' + it.key + '" aria-label="פחות">−</button>' +
+      '<span class="stepVal n" id="intakeVal_' + it.key + '">' + c + '</span>' +
+      '<button class="stepBtn" data-intake-inc="' + it.key + '" aria-label="עוד">+</button>' +
+      '</span></div>';
+  });
+  html += '</div>';
+
+  var t = FT.intakeTotals(doc.intake, FT.weekStart(FT.todayISO()), FT.todayISO());
+  var parts = [];
+  FT.INTAKE_ITEMS.forEach(function (it) {
+    if (t[it.key] > 0) parts.push(esc(it.label) + " " + n(t[it.key]));
+  });
+  html += '<div class="note">השבוע: ' + (parts.length ? parts.join(" · ") : "עדיין כלום") + '</div>';
+  html += '</div>';
+  return html;
+}
+
+/* Weekly intake beside weekly weight change. Deliberately NOT a correlation
+   coefficient — with five weeks before Paris, n is far too small, and a
+   confident-looking number would be worse than no number at all. */
+function intakeObservationCard() {
+  var obs = FT.intakeObservation(doc.weights, doc.intake);
+  var html = '<div class="card"><div class="cardHead">' +
+    '<div class="cardTitle">צריכה מול מגמה</div>' +
+    '<div class="hint">שבוע מול שבוע</div></div>';
+
+  if (obs.status !== "ok") {
+    html += '<div class="note">' + esc(obs.reason) + '</div></div>';
+    return html;
+  }
+
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
+    '<thead><tr style="color:var(--muted);font-size:11px;text-align:start">' +
+    '<th style="text-align:start;padding:4px 6px;font-weight:500">שבוע</th>' +
+    '<th style="text-align:start;padding:4px 6px;font-weight:500">שינוי</th>';
+  FT.INTAKE_ITEMS.forEach(function (it) {
+    html += '<th style="text-align:start;padding:4px 6px;font-weight:500">' + esc(it.label) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  var partial = false;
+  obs.all.slice(-6).forEach(function (w) {
+    var cls = w.deltaKg === null ? "flat" : (w.deltaKg < -0.05 ? "down" : (w.deltaKg > 0.05 ? "up" : "flat"));
+    // a week fitted from 2-3 weigh-ins swings wildly; say so rather than
+    // presenting it with the same authority as a full week
+    var thin = w.points < 4;
+    if (thin) partial = true;
+    html += '<tr style="border-top:1px solid var(--border)">' +
+      '<td style="padding:6px;color:var(--muted)" class="n">' + fmtDate(w.week) + '</td>' +
+      '<td style="padding:6px" class="n ' + cls + '"' + (thin ? ' style="padding:6px;opacity:.55"' : '') + '>' +
+      (w.deltaKg === null ? "—" : (w.deltaKg > 0 ? "+" : "") + w.deltaKg.toFixed(2)) +
+      (thin ? '<span class="dim">*</span>' : '') + '</td>';
+    FT.INTAKE_ITEMS.forEach(function (it) {
+      var v = w.totals[it.key];
+      html += '<td style="padding:6px' + (v ? '' : ';color:var(--dim)') + '" class="n">' + v + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  if (partial) {
+    html += '<div class="note">' + n("*") + ' שבוע עם פחות מ-' + n("4") +
+      ' שקילות — המספר שם רועש ולא שווה הרבה.</div>';
+  }
+  html += '<div class="note">הטבלה מציגה מספרים זה לצד זה. היא לא מוכיחה סיבתיות — ' +
+    n(obs.weeks) + ' שבועות זה מדגם קטן מכדי להסיק ממנו, והמשקל מושפע גם משינה, מלח, ' +
+    'פעילות ומכל מה שאכלת ולא נרשם כאן.</div>';
+  html += '</div>';
+  return html;
+}
+
+function intakeInfoCard() {
+  var html = '<div class="card" style="gap:10px">' +
+    '<button class="toggleBtn" id="intakeInfoToggle"><span>מה זה עושה לגוף</span>' +
+    '<span class="hint" style="font-weight:400">' +
+    (view.showIntakeInfo ? "סגירה ▲" : "קפה · אלכוהול · בשר ▼") + '</span></button>';
+
+  if (view.showIntakeInfo) {
+    FT.INTAKE_ITEMS.forEach(function (it) {
+      html += '<div style="border:1px solid var(--border);border-radius:var(--r-ctl);padding:12px;' +
+        'display:flex;flex-direction:column;gap:10px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">' +
+        '<span style="font-size:14px;font-weight:600;color:var(--gold)">' + esc(it.label) + '</span>' +
+        '<span class="badge" style="color:' + (it.breaksFast ? "var(--rust)" : "var(--sage)") + '">' +
+        (it.breaksFast ? "שובר צום" : "לא שובר צום") + '</span></div>' +
+        '<div class="blk"><div class="k">מה קורה</div><div class="v">' + esc(it.now) + '</div></div>' +
+        '<div class="blk"><div class="k">מול הצום</div><div class="v">' + esc(it.fasting) + '</div></div>' +
+        '<div class="blk"><div class="k">מול הירידה במשקל</div><div class="v">' + esc(it.effect) + '</div></div>' +
+        '<div class="blk"><div class="k">תזמון וכמות</div><div class="v">' + esc(it.timing) + '</div></div>' +
+        (it.caution ? '<div class="blk warn"><div class="k">הערה</div><div class="v">' + esc(it.caution) + '</div></div>' : '') +
+        '</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================ *
  *  Goals
  * ============================================================ */
 function goalsCard() {
@@ -788,8 +931,9 @@ function render() {
     return;
   }
 
-  var colA = fastingCard() + statusCard() + phaseGuideCard();
-  var colB = paceCard() + tilesCard() + chartCard() + logCard() + goalsCard() + historyCard() + settingsCard();
+  var colA = fastingCard() + statusCard() + phaseGuideCard() + intakeInfoCard();
+  var colB = paceCard() + tilesCard() + chartCard() + intakeCard() + intakeObservationCard() +
+    logCard() + goalsCard() + historyCard() + settingsCard();
 
   app.innerHTML = header() + banners() +
     '<div class="col">' + colA + '</div>' +
@@ -928,6 +1072,17 @@ function wire() {
     };
   });
 
+  // intake
+  on("intakeDate", function (e) { view.intakeDate = e.target.value; render(); }, "change");
+  on("intakeToday", function () { view.intakeDate = null; render(); });
+  on("intakeInfoToggle", function () { view.showIntakeInfo = !view.showIntakeInfo; render(); });
+  each("[data-intake-inc]", function (b) {
+    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
+  });
+  each("[data-intake-dec]", function (b) {
+    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-dec"), -1); };
+  });
+
   on("toggleGoalForm", function () { view.showGoalForm = !view.showGoalForm; view.editingGoalId = null; render(); });
   on("addGoalFromEmpty", function () { view.showGoalForm = true; render(); });
   on("saveGoal", saveNewGoal);
@@ -1027,6 +1182,32 @@ function saveEditedWeight(origDate) {
   if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
   showToast(r.merged ? "מוזג לשקילה הקיימת של " + fmtDate(newDate) : "עודכן",
     function () { doc.weights = before; });
+}
+
+function bumpIntake(key, delta) {
+  var date = view.intakeDate || FT.todayISO();
+  var cur = Math.max(0, Number(FT.intakeOn(doc.intake, date)[key]) || 0);
+  var next = Math.max(0, cur + delta);
+  if (next === cur) return;
+
+  var r = FT.upsertIntake(doc.intake, date, key, next);
+  doc.intake = r.intake;
+  var ok = persist();
+  render();
+  if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
+
+  /* Only prompt for things that actually break a fast — black coffee and
+     plain tea don't, and nagging every morning would train you to ignore it.
+     Offered, never automatic: a mistap must not destroy a running timer, and
+     you may be logging something from before the fast started. */
+  if (delta > 0 && doc.session && FT.breaksFast(key) && date === FT.todayISO()) {
+    var item = FT.intakeItem(key);
+    var h = activeHours();
+    showToast(item.label + " בזמן צום של " + fmtHM(h) + " שעות — זה שובר את הצום.", {
+      label: "סיים צום",
+      fn: function () { stopFast(); }
+    });
+  }
 }
 
 function saveMeasure() {
