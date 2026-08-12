@@ -22,6 +22,10 @@ var view = {
   editingGoalId: null,
   showMeasureForm: false,
   chartAllGoals: false,
+  editingWeightDate: null,
+  showAllWeights: false,
+  showBackdate: false,
+  backdateValue: null,
   bannerDismissed: {},
   undo: null,
   undoTimer: null,
@@ -547,25 +551,56 @@ function chartCard() {
 /* ============================================================ *
  *  Log
  * ============================================================ */
+var WEIGHT_ROWS = 5;
+
 function logCard() {
   var html = '<div class="card"><div class="cardTitle">רישום</div>';
   html += '<div style="display:flex;gap:8px">' +
     '<input type="number" step="0.1" id="weightInput" placeholder="משקל, ק״ג" style="flex:1"/>' +
     '<button class="btn gold" id="logWeightBtn">שמירה</button></div>';
 
+  /* Quick-add writes to today, which is the common case. Backfilling a
+     forgotten day needs an explicit date, but putting a date field in the
+     default path adds a tap to every single weigh-in — so it's revealed. */
+  if (view.showBackdate) {
+    html += '<div style="display:flex;gap:8px;align-items:center">' +
+      '<input type="date" id="backdateInput" value="' + esc(view.backdateValue || FT.todayISO()) +
+      '" max="' + FT.todayISO() + '"/>' +
+      '<button class="linkBtn muted" id="cancelBackdate">ביטול</button></div>';
+  } else {
+    html += '<button class="linkBtn muted" id="toggleBackdate" style="text-align:start">רישום לתאריך אחר</button>';
+  }
+
   var sorted = doc.weights.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   if (sorted.length) {
+    var shown = view.showAllWeights ? sorted : sorted.slice(0, WEIGHT_ROWS);
     html += '<div class="rows">';
-    sorted.slice(0, 4).forEach(function (w, i) {
-      var prev = sorted[i + 1];
+    shown.forEach(function (w, i) {
+      if (view.editingWeightDate === w.date) {
+        html += '<div style="background:var(--surface2);border-radius:var(--r-tile);padding:12px;' +
+          'display:flex;flex-direction:column;gap:8px">' +
+          '<div style="display:flex;gap:8px">' +
+          '<input type="date" id="editWeightDate" value="' + esc(w.date) + '" max="' + FT.todayISO() + '"/>' +
+          '<input type="number" step="0.1" id="editWeightKg" value="' + w.kg.toFixed(1) + '"/></div>' +
+          '<div class="btnRow"><button class="btn gold grow" data-saveweight="' + w.date + '">שמירה</button>' +
+          '<button class="btn quiet" id="cancelWeightEdit">ביטול</button></div></div>';
+        return;
+      }
+      // delta is against the next row down, which is the previous weigh-in
+      var prev = sorted[sorted.indexOf(w) + 1];
       var d = prev ? w.kg - prev.kg : null;
       var cls = d === null ? "flat" : (d < -0.05 ? "down" : (d > 0.05 ? "up" : "flat"));
       html += '<div class="row"><span class="d n">' + fmtDate(w.date) + '</span>' +
         '<span class="rowVals"><span class="n" style="font-weight:500">' + w.kg.toFixed(1) + '</span>' +
         '<span class="n ' + cls + '">' + (d === null ? "—" : (d > 0 ? "+" : "") + d.toFixed(1)) + '</span>' +
+        '<button class="linkBtn" data-editweight="' + w.date + '">עריכה</button>' +
         '<button class="x" data-delweight="' + w.date + '">✕</button></span></div>';
     });
     html += '</div>';
+    if (sorted.length > WEIGHT_ROWS) {
+      html += '<button class="linkBtn" id="toggleAllWeights">' +
+        (view.showAllWeights ? "הצג פחות" : "הצג את כל " + n(sorted.length) + " השקילות") + '</button>';
+    }
   }
 
   html += '<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:12px">';
@@ -857,6 +892,20 @@ function wire() {
 
   on("logWeightBtn", logWeight);
   on("weightInput", function (e) { if (e.key === "Enter") logWeight(); }, "keydown");
+  on("toggleBackdate", function () {
+    view.showBackdate = true; view.backdateValue = FT.todayISO(); render();
+    var el = document.getElementById("weightInput"); if (el) el.focus();
+  });
+  on("cancelBackdate", function () { view.showBackdate = false; view.backdateValue = null; render(); });
+  on("backdateInput", function (e) { view.backdateValue = e.target.value; }, "change");
+  on("toggleAllWeights", function () { view.showAllWeights = !view.showAllWeights; render(); });
+  each("[data-editweight]", function (b) {
+    b.onclick = function () { view.editingWeightDate = b.getAttribute("data-editweight"); render(); };
+  });
+  on("cancelWeightEdit", function () { view.editingWeightDate = null; render(); });
+  each("[data-saveweight]", function (b) {
+    b.onclick = function () { saveEditedWeight(b.getAttribute("data-saveweight")); };
+  });
   each("[data-delweight]", function (b) {
     b.onclick = function () {
       var date = b.getAttribute("data-delweight");
@@ -930,19 +979,54 @@ function stopFast() {
   });
 }
 
+function validWeight(kg) { return isFinite(kg) && kg > 20 && kg <= 300; }
+
 function logWeight() {
   var el = document.getElementById("weightInput");
   var kg = parseFloat(String(el.value).replace(",", "."));
-  if (!isFinite(kg) || kg <= 20 || kg > 300) { showToast("משקל לא תקין"); return; }
-  var d = FT.todayISO();
-  doc.weights = doc.weights.filter(function (w) { return w.date !== d; });
-  doc.weights.push({ date: d, kg: +kg.toFixed(1) });
-  doc.weights.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (!validWeight(kg)) { showToast("משקל לא תקין"); return; }
+
+  var d = (view.showBackdate && view.backdateValue) ? view.backdateValue : FT.todayISO();
+  if (FT.isFutureDate(d)) { showToast("אי אפשר לרשום שקילה בעתיד"); return; }
+
+  var before = doc.weights.slice();
+  var r = FT.upsertWeight(doc.weights, d, kg);
+  doc.weights = r.weights;
+  var replaced = r.replaced;
+  view.showBackdate = false; view.backdateValue = null;
   // confirm only after the write actually succeeded — a "saved ✓" that
   // can lie is worse than no confirmation at all
   var ok = persist();
   render();
-  showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה");
+  if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
+  if (replaced) {
+    showToast("הוחלפה השקילה של " + fmtDate(d) + " (" + replaced.kg.toFixed(1) + ")", function () {
+      doc.weights = before;
+    });
+  } else {
+    showToast(d === FT.todayISO() ? "נשמר" : "נשמר לתאריך " + fmtDate(d));
+  }
+}
+
+function saveEditedWeight(origDate) {
+  var orig = doc.weights.filter(function (w) { return w.date === origDate; })[0];
+  if (!orig) return;
+  var newDate = document.getElementById("editWeightDate").value;
+  var kg = parseFloat(String(document.getElementById("editWeightKg").value).replace(",", "."));
+  if (!newDate) { showToast("צריך תאריך"); return; }
+  if (FT.isFutureDate(newDate)) { showToast("אי אפשר לרשום שקילה בעתיד"); return; }
+  if (!validWeight(kg)) { showToast("משקל לא תקין"); return; }
+
+  var before = doc.weights.slice();
+  var r = FT.moveWeight(doc.weights, origDate, newDate, kg);
+  doc.weights = r.weights;
+
+  view.editingWeightDate = null;
+  var ok = persist();
+  render();
+  if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
+  showToast(r.merged ? "מוזג לשקילה הקיימת של " + fmtDate(newDate) : "עודכן",
+    function () { doc.weights = before; });
 }
 
 function saveMeasure() {

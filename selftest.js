@@ -179,6 +179,79 @@
         FT.validGoalWeight(70) === true ? true : "band check wrong";
     });
 
+    /* ================= weight entry / edit ================= */
+    group("upsertWeight");
+    var W_BASE = [
+      { date: "2026-08-01", kg: 76 },
+      { date: "2026-08-03", kg: 75.5 }
+    ];
+    check("adds a new date and keeps the list sorted", function () {
+      var r = FT.upsertWeight(W_BASE, "2026-08-02", 75.8);
+      if (r.weights.length !== 3) return "expected 3, got " + r.weights.length;
+      var dates = r.weights.map(function (w) { return w.date; });
+      return eq(dates.join(","), "2026-08-01,2026-08-02,2026-08-03", "order");
+    });
+    check("same date REPLACES, never duplicates", function () {
+      var r = FT.upsertWeight(W_BASE, "2026-08-01", 74.2);
+      if (r.weights.length !== 2) return "duplicated: got " + r.weights.length + " rows";
+      var hit = r.weights.filter(function (w) { return w.date === "2026-08-01"; });
+      return eq(hit[0].kg, 74.2, "value");
+    });
+    check("returns what it displaced, so undo has something to restore", function () {
+      var r = FT.upsertWeight(W_BASE, "2026-08-01", 74.2);
+      return r.replaced && r.replaced.kg === 76 ? true : "replaced was " + JSON.stringify(r.replaced);
+    });
+    check("returns null replaced on a fresh date", function () {
+      return isNull(FT.upsertWeight(W_BASE, "2026-08-09", 75).replaced, "replaced");
+    });
+    check("does not mutate the array it was given", function () {
+      var orig = W_BASE.slice(), len = W_BASE.length;
+      FT.upsertWeight(W_BASE, "2026-08-05", 75);
+      return W_BASE.length === len && W_BASE[0].kg === orig[0].kg
+        ? true : "input array was mutated";
+    });
+    check("never produces two rows on one date", function () {
+      var w = W_BASE;
+      ["2026-08-01", "2026-08-01", "2026-08-03", "2026-08-01"].forEach(function (d, i) {
+        w = FT.upsertWeight(w, d, 70 + i).weights;
+      });
+      var seen = {}, dup = null;
+      w.forEach(function (x) { if (seen[x.date]) dup = x.date; seen[x.date] = 1; });
+      return dup ? "duplicate date survived: " + dup : true;
+    });
+
+    group("moveWeight");
+    check("moves an entry to a free date", function () {
+      var r = FT.moveWeight(W_BASE, "2026-08-01", "2026-07-30", 76);
+      if (r.merged) return "reported a merge when the target was free";
+      var dates = r.weights.map(function (w) { return w.date; }).join(",");
+      return eq(dates, "2026-07-30,2026-08-03", "dates");
+    });
+    check("moving onto an occupied date merges, leaving one row", function () {
+      var r = FT.moveWeight(W_BASE, "2026-08-01", "2026-08-03", 74);
+      if (!r.merged) return "merge not reported";
+      if (r.weights.length !== 1) return "expected 1 row, got " + r.weights.length;
+      return eq(r.weights[0].kg, 74, "surviving value");
+    });
+    check("editing value only, same date, keeps one row", function () {
+      var r = FT.moveWeight(W_BASE, "2026-08-01", "2026-08-01", 75.1);
+      if (r.weights.length !== 2) return "expected 2 rows, got " + r.weights.length;
+      return eq(r.weights[0].kg, 75.1, "value");
+    });
+
+    group("date guards");
+    check("future dates are rejected", function () {
+      if (FT.isFutureDate("2026-08-12", "2026-08-11") !== true) return "tomorrow was allowed";
+      if (FT.isFutureDate("2026-08-11", "2026-08-11") !== false) return "today was rejected";
+      if (FT.isFutureDate("2026-08-10", "2026-08-11") !== false) return "yesterday was rejected";
+      return true;
+    });
+    check("a backfilled past weigh-in reaches the trend fit", function () {
+      var w = FT.upsertWeight(series(76, -0.13, 5), "2026-07-15", 77).weights;
+      var sm = FT.smoothWeights(w);
+      return eq(sm[0].date, "2026-07-15", "earliest point after backfill");
+    });
+
     /* ================= composition ================= */
     group("compositionSignal");
     var W3 = series(76, -0.13, 22);
