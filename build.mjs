@@ -63,12 +63,18 @@ standalone = standalone
   .replace(/<link rel="apple-touch-icon"[^>]*>\n?/, "");
 writeFileSync(join(OUT, "fasttrack.html"), standalone);
 
-/* ---- 3. demo entry points, for design review ---- */
+/* ---- 3. demo entry points, for design review ----
+   Written to BOTH deploy/ and the repo root. The root copies are what
+   review.html frames and what gets opened during development; generating
+   them here rather than by hand is what stops them silently going stale
+   against a CSS change. They are git-ignored. */
 for (const [name, val] of [["fasting", "1"], ["behind", "behind"], ["empty", "empty"]]) {
-  writeFileSync(
-    join(OUT, `demo-${name}.html`),
-    shell.replace('<script src="app.js"></script>', `<script>window.__DEMO="${val}";</script>\n<script src="app.js"></script>`)
+  const html = shell.replace(
+    '<script src="app.js"></script>',
+    `<script>window.__DEMO="${val}";</script>\n<script src="app.js"></script>`
   );
+  writeFileSync(join(OUT, `demo-${name}.html`), html);
+  writeFileSync(`demo-${name}.html`, html);
 }
 
 const kb = (s) => (Buffer.byteLength(s) / 1024).toFixed(1) + "kb";

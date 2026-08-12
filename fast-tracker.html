@@ -196,6 +196,18 @@
   .legend .swLine{width:14px; height:2px; background:var(--gold);}
   .legend .swDash{width:14px; height:0; border-top:2px dashed var(--dim);}
 
+  /* ---- stepper ---- */
+  /* forced LTR so it always reads [−][value][+], the universal shape for a
+     numeric control — RTL would put the minus on the far side of the plus */
+  .stepper{display:flex; align-items:center; gap:2px; flex:0 0 auto; direction:ltr;
+           background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r-pill); padding:2px;}
+  .stepBtn{width:34px; height:34px; border-radius:50%; border:none; background:transparent;
+           color:var(--text); font-size:18px; line-height:1; cursor:pointer;
+           display:flex; align-items:center; justify-content:center; transition:background .12s;}
+  .stepBtn:hover{background:var(--surface3);}
+  .stepBtn:active{background:var(--gold); color:#14171A;}
+  .stepVal{min-width:28px; text-align:center; font-size:15px; font-weight:600;}
+
   /* ---- lists ---- */
   .rows{display:flex; flex-direction:column; gap:6px;}
   .row{display:flex; align-items:center; justify-content:space-between; gap:10px;

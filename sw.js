@@ -9,7 +9,7 @@
  */
 "use strict";
 
-var VERSION = "ft-2.1.0";
+var VERSION = "ft-2.2.0";
 var SHELL = [
   "./",
   "./index.html",

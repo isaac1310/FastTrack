@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.1.0
+# FastTrack — human test plan v2.2.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.1.0`. If it doesn't, you're on a cached page and every result below is
+read `v2.2.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `60 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `88 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,4 +128,45 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.1.0`
+Version footer checked: ☐ `v2.2.0`
+
+---
+
+## 10 · Intake ⚠️ *new in v2.2.0*
+
+27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
+    **Expect:** the count goes up and **nothing else happens** — no prompt.
+    Black coffee doesn't break a fast, and being nagged every morning would
+    train you to ignore the prompt that matters.
+28. Now tap `+` on **אלכוהול** or **בשר** during the same fast.
+    **Expect:** ⚠️ a toast appears saying it breaks the fast, with a
+    "סיים צום" button. The timer must **still be running** — it does not end
+    on its own.
+29. Tap "סיים צום" on that toast.
+    **Expect:** the fast ends and is added to the history, and the item stays
+    logged.
+30. Repeat step 28 but ignore the toast for ten seconds.
+    **Expect:** it disappears, the item stays logged, and the fast is still
+    running. Both outcomes are valid — you may be logging something from
+    before the fast began.
+31. Change the date at the top of the צריכה card to a past day.
+    **Expect:** counts switch to that day's values, and a "היום" link appears
+    to get back. Future dates are not selectable.
+32. Tap `−` repeatedly on any item at zero.
+    **Expect:** it stays at zero. No negative counts.
+33. Look at the צריכה מול מגמה table.
+    **Expect:** one row per week, weight change beside the counts. Any week
+    marked `*` has fewer than 4 weigh-ins, with the footnote explaining it.
+    ⚠️ Nothing anywhere should claim a cause.
+34. Open "מה זה עושה לגוף".
+    **Expect:** four items, each with what happens / fasting / weight-loss
+    effect / timing, and a "שובר צום" or "לא שובר צום" badge that matches the
+    behaviour you just saw in steps 27–28.
+
+## 11 · Upgrade from v2.1.0 ⚠️ *data safety*
+
+35. If you already had data on the phone before this version, open the app and
+    check your weigh-ins, goals and measurements are all still there.
+    **Expect:** ⚠️ everything intact. v3 added intake purely additively and
+    upgrades a v2 document in place — but this is the check that matters most,
+    because the failure mode is silent data loss.
