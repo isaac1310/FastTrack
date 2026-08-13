@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.7.0).
+/* FastTrack — UI layer (v2.8.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -485,6 +485,16 @@ function liveIntakeBlocks() {
     html += '<div class="blk"><div class="k">בשר · ' + agoLabel(meat.hours) +
       ' · ' + esc(meat.stage.label) + '</div><div class="v">' + esc(meat.stage.now) + '</div></div>';
     html += '<div class="blk"><div class="k">מה זה אומר</div><div class="v">' + esc(meat.stage.helps) + '</div></div>';
+  }
+
+  /* ---- gluten: same day-scale treatment as meat ---- */
+  var gl = FT.glutenSince(doc.intakeLog);
+  if (gl) {
+    html += '<div class="blk"><div class="k">גלוטן · ' + agoLabel(gl.hours) +
+      ' · ' + esc(gl.stage.label) + '</div><div class="v">' + esc(gl.stage.now) + '</div></div>';
+    if (gl.stage.helps !== "—") {
+      html += '<div class="blk"><div class="k">מה זה אומר</div><div class="v">' + esc(gl.stage.helps) + '</div></div>';
+    }
   }
 
   /* Ayurvedic reading of the same state, inline but labelled per line so the

@@ -14,7 +14,7 @@ device and leaves it only through a JSON export you trigger yourself.
 - **Body measurements** (waist + thigh) under a fixed protocol, used to separate
   fat loss from water and lean mass.
 - **Goals** — any number of dated weight milestones you can add, edit and delete.
-- **Intake** — coffee, alcohol and meat, one tap each. Shown week-by-week
+- **Intake** — coffee, alcohol, meat and gluten, one tap each. Shown week-by-week
   alongside that week's weight change, plus a reference on what each does to
   the body and whether it breaks a fast.
 - **Live body status** — how long since your last coffee or drink, what stage
@@ -89,4 +89,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.6.0.md` | Human pass |
+| `tests/TEST-PLAN-v2.8.0.md` | Human pass |

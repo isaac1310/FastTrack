@@ -271,9 +271,9 @@
       // logAt() silently drops unknown keys, so a stale key in a fixture turns
       // its check into a tautology. This catches that.
       var real = FT.INTAKE_ITEMS.map(function (i) { return i.key; });
-      var probe = logAt([["meat", 1], ["coffeeBlack", 1], ["alcohol", 1]]);
-      if (probe.length !== 3) return "a fixture key was dropped: only " + probe.length + " of 3 stored";
-      return real.length === 3 ? true : "item list changed; fixtures need review";
+      var probe = logAt([["meat", 1], ["coffeeBlack", 1], ["alcohol", 1], ["gluten", 1]]);
+      if (probe.length !== 4) return "a fixture key was dropped: only " + probe.length + " of 4 stored";
+      return real.length === 4 ? true : "item list changed; fixtures need review";
     });
     check("an unknown item is rejected, not stored", function () {
       var r = FT.addIntakeEvent([], "kombucha", T0);
@@ -473,9 +473,9 @@
       { at: T0 - 3 * 24 * 3600000, key: "meat", approx: true },
       { at: T0 - 7 * 24 * 3600000, key: "alcohol", approx: true }
     ];
-    check("reports all three groups even when they were never logged", function () {
+    check("reports all four groups even when they were never logged", function () {
       var r = FT.intakeSummary([], T0);
-      if (r.length !== 3) return "expected 3 groups, got " + r.length;
+      if (r.length !== 4) return "expected 4 groups, got " + r.length;
       return r.every(function (g) { return g.ever === false && g.stage === null; })
         ? true : "a never-logged group claimed a stage";
     });
@@ -578,6 +578,34 @@
     check("never logged returns null, not zero", function () {
       // "0 clean days" and "never touched it" must not look alike
       return isNull(FT.abstinenceDays([], FT.ALCOHOL_KEYS, T0), "abstinenceDays");
+    });
+
+    group("gluten honesty");
+    check("copy states no established physiology without celiac", function () {
+      var st = FT.glutenSince([{ at: T0 - 40 * 3600000, key: "gluten", approx: true }], T0).stage;
+      return /אין תהליך פיזיולוגי ידוע|בלי צליאק/.test(st.now)
+        ? true : "gluten-free days presented as a physiological process";
+    });
+    check("blinded-challenge figure and FODMAP explanation are present", function () {
+      var it = FT.intakeItem("gluten");
+      var st = FT.glutenSince([{ at: T0 - 200 * 3600000, key: "gluten", approx: true }], T0).stage;
+      if (!/8%/.test(it.timing + st.now)) return "the ~8% blinded-challenge figure is missing";
+      return /FODMAP/.test(it.timing + it.effect) ? true : "FODMAP explanation missing";
+    });
+    check("celiac testing-before-elimination warning is present", function () {
+      var it = FT.intakeItem("gluten");
+      return /צליאק/.test(it.caution) && /בדיקת דם|לפני/.test(it.caution)
+        ? true : "missing the test-before-stopping warning";
+    });
+    check("gluten timeline covers 0 to Infinity with no gaps", function () {
+      var tl = FT.GLUTEN_TIMELINE;
+      if (tl[0].from !== 0) return "does not start at 0";
+      for (var i = 1; i < tl.length; i++) if (tl[i].from !== tl[i - 1].to) return "gap at " + tl[i - 1].to;
+      return isFinite(tl[tl.length - 1].to) ? "does not end at Infinity" : true;
+    });
+    check("gluten breaks a fast for the calories, and the copy says so", function () {
+      if (FT.breaksFast("gluten") !== true) return "gluten marked fasting-safe";
+      return /קלוריות/.test(FT.intakeItem("gluten").fasting) ? true : "fasting copy blames the gluten";
     });
 
     group("headache ambiguity");
