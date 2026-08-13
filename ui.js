@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.5.0).
+/* FastTrack — UI layer (v2.5.1).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -27,7 +27,6 @@ var view = {
   showIntakeInfo: false,
   intakeDate: null,
   showBackdate: false,
-  backfillKey: null,
   backdateValue: null,
   bannerDismissed: {},
   toastAction: null,
@@ -857,12 +856,19 @@ function intakeCard() {
   var isToday = date === FT.todayISO();
   var row = FT.intakeOn(doc.intakeLog, date);
 
-  var html = '<div class="card"><div class="cardHead" style="align-items:center">' +
+  /* One mechanism for choosing the day: this picker. When it is not today,
+     the card is visibly marked, because the failure that matters is tapping +
+     while the date is still set to last Tuesday and not noticing. */
+  var html = '<div class="card' + (isToday ? '' : ' pastDay') + '">' +
+    '<div class="cardHead" style="align-items:center">' +
     '<div class="cardTitle">צריכה</div>' +
-    '<div style="display:flex;gap:10px;align-items:center">' +
-    (isToday ? '' : '<button class="linkBtn" id="intakeToday">היום</button>') +
     '<input type="date" id="intakeDate" value="' + esc(date) + '" max="' + FT.todayISO() +
-    '" style="width:150px;padding:6px 8px;font-size:13px"/></div></div>';
+    '" style="width:158px;padding:6px 8px;font-size:13px"/></div>';
+
+  if (!isToday) {
+    html += '<div class="pastBanner">רושם ל<b class="n">' + fmtDate(date) + '</b>, לא להיום.' +
+      '<button class="linkBtn" id="intakeToday">חזרה להיום</button></div>';
+  }
 
   html += '<div class="rows">';
   FT.INTAKE_ITEMS.forEach(function (it) {
@@ -873,7 +879,6 @@ function intakeCard() {
       '<span style="font-size:11px;color:var(--dim)">' + esc(it.unit) +
       (it.breaksFast ? ' · שובר צום' : ' · לא שובר צום') +
       (lastOf(it.key) ? ' · אחרון ' + agoLabel(lastOf(it.key)) : '') + '</span>' +
-      '<button class="linkBtn" style="font-size:11px;text-align:start" data-backfill-open="' + it.key + '">+ ליום קודם</button>' +
       '</span>' +
       '<span class="stepper">' +
       '<button class="stepBtn" data-intake-dec="' + it.key + '" aria-label="פחות">−</button>' +
@@ -881,18 +886,6 @@ function intakeCard() {
       '<button class="stepBtn" data-intake-inc="' + it.key + '" aria-label="עוד">+</button>' +
       '</span></div>';
 
-    /* Quick backfill. Logging "meat, 3 days ago" through the date picker at
-       the top meant changing the date, tapping, then changing it back — four
-       interactions for one entry. These are one tap each. */
-    if (view.backfillKey === it.key) {
-      html += '<div class="backfill">';
-      for (var bd = 1; bd <= 7; bd++) {
-        var bdate = new Date(); bdate.setDate(bdate.getDate() - bd);
-        html += '<button class="chip" data-backfill-day="' + bd + '" data-backfill-key="' + it.key + '">' +
-          '<span class="n">' + bd + '</span>' + (bd === 1 ? " יום" : " ימים") + '</button>';
-      }
-      html += '<button class="linkBtn muted" id="cancelBackfill">ביטול</button></div>';
-    }
   });
   html += '</div>';
 
@@ -1088,7 +1081,15 @@ function settingsCard() {
   html += '<div class="btnRow"><button class="btn grow" id="exportBtn">ייצוא גיבוי</button>' +
     '<button class="btn grow" id="importBtn">ייבוא</button></div>' +
     '<input type="file" id="importFile" accept="application/json" style="display:none"/>';
-  html += '<div class="note">' + (doc.lastExportAt ? "גיבוי אחרון: " + n(fmtDate(doc.lastExportAt.slice(0, 10))) : "עדיין לא גיבית") + '</div>';
+  /* The banner is dismissible for good, so this line is the standing record.
+     It has to say the state plainly rather than in passing. */
+  var stale = FT.backupStale(doc.lastExportAt);
+  html += '<div class="' + (stale ? "blk warn" : "note") + '">' +
+    (stale ? '<div class="k">גיבוי</div><div class="v">' : '') +
+    (doc.lastExportAt
+      ? "גיבוי אחרון: " + n(fmtDate(doc.lastExportAt.slice(0, 10))) + (stale ? " — עבר יותר מ-" + n("10") + " ימים." : "")
+      : "עדיין לא גיבית. הנתונים קיימים רק במכשיר הזה.") +
+    (stale ? '</div>' : '') + '</div>';
   html += '</div>';
   return html;
 }
@@ -1113,10 +1114,14 @@ function banners() {
         '<button class="linkBtn muted" data-dismiss="weigh">סגירה</button></div>';
     }
   }
+  /* Dismissed for good, not for this page load. It was a standing fact about
+     where the data lives, redisplayed on every open — which is a nag, not a
+     warning. The backup status stays visible in the settings card, so nothing
+     is hidden; it just stops shouting. */
   var hasData = doc.weights.length + doc.measures.length + doc.fastHistory.length > 0;
-  if (hasData && FT.backupStale(doc.lastExportAt) && !view.bannerDismissed.backup) {
-    html += '<div class="banner warn full"><span>הנתונים שמורים רק במכשיר הזה ולא גובו לאחרונה. אובדן הטלפון = אובדן הכל.</span>' +
-      '<button class="linkBtn muted" data-dismiss="backup">סגירה</button></div>';
+  if (hasData && FT.backupStale(doc.lastExportAt) && !doc.dismissed.backup) {
+    html += '<div class="banner warn full"><span>הנתונים שמורים רק במכשיר הזה. אם הטלפון הולך לאיבוד, הם הולכים איתו — כדאי לייצא גיבוי.</span>' +
+      '<button class="linkBtn muted" data-dismiss-forever="backup">הבנתי</button></div>';
   }
   return html;
 }
@@ -1289,32 +1294,6 @@ function wire() {
   on("intakeDate", function (e) { view.intakeDate = e.target.value; render(); }, "change");
   on("intakeToday", function () { view.intakeDate = null; render(); });
   on("intakeInfoToggle", function () { view.showIntakeInfo = !view.showIntakeInfo; render(); });
-  each("[data-backfill-open]", function (b) {
-    b.onclick = function () {
-      var k = b.getAttribute("data-backfill-open");
-      view.backfillKey = view.backfillKey === k ? null : k;
-      render();
-    };
-  });
-  on("cancelBackfill", function () { view.backfillKey = null; render(); });
-  each("[data-backfill-day]", function (b) {
-    b.onclick = function () {
-      var days = Number(b.getAttribute("data-backfill-day"));
-      var key = b.getAttribute("data-backfill-key");
-      var d = new Date(); d.setDate(d.getDate() - days);
-      var iso = FT.todayISO(d);
-      // no exact time for a past day, so noon + approx — same rule as the
-      // migrated v3 counts, and excluded from the live estimates
-      var r = FT.addIntakeEvent(doc.intakeLog, key, new Date(iso + "T12:00:00").getTime(), true);
-      if (!r.added) return;
-      doc.intakeLog = r.log;
-      view.backfillKey = null;
-      var ok = persist();
-      render();
-      showToast(ok ? FT.intakeItem(key).label + " נרשם ל" + fmtDate(iso)
-                   : "לא ניתן לשמור במכשיר הזה");
-    };
-  });
   each("[data-intake-inc]", function (b) {
     b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
   });
@@ -1345,6 +1324,12 @@ function wire() {
 
   each("[data-dismiss]", function (b) {
     b.onclick = function () { view.bannerDismissed[b.getAttribute("data-dismiss")] = true; render(); };
+  });
+  each("[data-dismiss-forever]", function (b) {
+    b.onclick = function () {
+      doc.dismissed[b.getAttribute("data-dismiss-forever")] = new Date().toISOString();
+      persist(); render();
+    };
   });
 
   on("askNotif", requestNotifications);

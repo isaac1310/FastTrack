@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "2.5.0";
+var APP_VERSION = "2.5.1";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 4;
 
@@ -179,6 +179,7 @@ function emptyDoc() {
     reminders: { weighIn: "08:00", measureWeekday: 0, enabled: false, permission: "default" },
     session: null,
     fastHistory: [],
+    dismissed: {},
     lastExportAt: null,
     updatedAt: new Date().toISOString()
   };
@@ -286,6 +287,7 @@ function normalizeDoc(d) {
   d.weights = Array.isArray(d.weights) ? d.weights : [];
   d.measures = Array.isArray(d.measures) ? d.measures : [];
   d.intakeLog = Array.isArray(d.intakeLog) ? d.intakeLog : [];
+  d.dismissed = (d.dismissed && typeof d.dismissed === "object") ? d.dismissed : {};
   d.fastHistory = Array.isArray(d.fastHistory) ? d.fastHistory : [];
   if (d.session && !isFinite(d.session.start)) d.session = null;
   return d;

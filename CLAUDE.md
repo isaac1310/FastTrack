@@ -80,11 +80,11 @@ node build.mjs
 ```
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run at **both** 412px
-and desktop. Expect `136 passed, 0 failed, 1 skipped` at each; the skip is the
+and desktop. Expect `139 passed, 0 failed, 1 skipped` at each; the skip is the
 opposite width's layout check and must state its reason. **A skip without a
 reason is a failure, and a run with skips is never "all passed."**
 
-Then the human pass: `tests/TEST-PLAN-v2.5.0.md`.
+Then the human pass: `tests/TEST-PLAN-v2.5.1.md`.
 
 Verify UI in a real browser before claiming it works. Every visual bug in this
 project so far was invisible in code and obvious on screen.
