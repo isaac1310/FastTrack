@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.3.0).
+/* FastTrack — UI layer (v2.4.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -347,36 +347,80 @@ function fastingCard() {
  * ============================================================ */
 /* Live estimates of what is actually circulating right now. Rendered as
    blocks inside the body-status card and refreshed by tick(). */
+/* "לפני 8:12 שעות" — hours:minutes since a dose. */
+function sinceLabel(hours) {
+  if (hours === null || !isFinite(hours)) return "—";
+  if (hours < 1) return Math.round(hours * 60) + " דק׳";
+  return fmtHM(hours) + " שעות";
+}
+
+var CAFFEINE_RELEVANT_H = 72;  // withdrawal can still be running at 2-3 days
+var ALCOHOL_RELEVANT_H = 16;   // through the recovery/hangover window
+
 function liveIntakeBlocks() {
   var caf = FT.caffeineNow(doc.intakeLog);
   var alc = FT.alcoholNow(doc.intakeLog);
+  var cafSince = FT.caffeineSince(doc.intakeLog);
+  var alcSince = FT.alcoholSince(doc.intakeLog);
   var html = "";
 
-  if (alc.units > 0.05) {
-    html += '<div class="blk warn"><div class="k">אלכוהול בדם</div><div class="v">' +
-      'בערך <b class="n">' + alc.units.toFixed(1) + '</b> מנות עוד לא פונו. ' +
-      'עד שהן יפונו — בסביבות <b class="n">' + fmtClock(alc.clearAtMs) + '</b> — ' +
-      'חמצון השומן מדוכא: הגוף שורף את האלכוהול לפני השומן.</div></div>';
+  /* ---- alcohol: how much is left, how long since, and what stage ---- */
+  if (alcSince && alcSince.hours < ALCOHOL_RELEVANT_H) {
+    var aStage = alcSince.stage;
+    html += '<div class="blk' + (alc.units > 0.05 ? ' warn' : '') + '">' +
+      '<div class="k">אלכוהול · לפני ' + sinceLabel(alcSince.hours) + ' · ' + esc(aStage.label) + '</div>' +
+      '<div class="v">';
+    if (alc.units > 0.05) {
+      html += 'בערך <b class="n">' + alc.units.toFixed(1) + '</b> מנות עוד לא פונו, בסביבות <b class="n">' +
+        fmtClock(alc.clearAtMs) + '</b> זה יסתיים. ';
+    }
+    html += esc(aStage.now) + '</div></div>';
+    html += '<div class="blk"><div class="k">מה זה מרגיש</div><div class="v">' + esc(aStage.feel) + '</div></div>';
+    if (aStage.helps !== "—") {
+      html += '<div class="blk"><div class="k">מה עוזר</div><div class="v">' + esc(aStage.helps) + '</div></div>';
+    }
   }
 
-  if (caf.mg > 0) {
-    var sleepy = caf.clearAtMs && caf.hoursToThreshold > 0;
-    html += '<div class="blk"><div class="k">קפאין בגוף</div><div class="v">' +
-      'בערך <b class="n">' + caf.mg + '</b> מ״ג פעילים' +
-      (sleepy
-        ? ', וירדו מתחת ל-<span class="n">' + FT.CAFFEINE_SLEEP_MG + '</span> מ״ג בסביבות <b class="n">' +
-          fmtClock(caf.clearAtMs) + '</b>. עד אז זה עלול לפגוע בשינה העמוקה גם אם נרדמים בקלות.'
-        : '.') +
-      '</div></div>';
+  /* ---- caffeine: the same, and it keeps showing after it has cleared,
+     because the withdrawal window is exactly when it matters most ---- */
+  if (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) {
+    var cStage = cafSince.stage;
+    html += '<div class="blk"><div class="k">קפאין · לפני ' + sinceLabel(cafSince.hours) +
+      ' · ' + esc(cStage.label) + '</div><div class="v">';
+    if (caf.mg > 0) {
+      html += 'בערך <b class="n">' + caf.mg + '</b> מ״ג עדיין פעילים' +
+        (caf.clearAtMs && caf.hoursToThreshold > 0
+          ? ', ויירדו מתחת ל-<span class="n">' + FT.CAFFEINE_SLEEP_MG + '</span> מ״ג בסביבות <b class="n">' +
+            fmtClock(caf.clearAtMs) + '</b>'
+          : '') + '. ';
+    }
+    html += esc(cStage.now) + '</div></div>';
+    html += '<div class="blk"><div class="k">מה זה מרגיש</div><div class="v" id="cafFeel">' + esc(cStage.feel) + '</div></div>';
+    html += '<div class="blk"><div class="k">מה עוזר</div><div class="v">' + esc(cStage.helps) + '</div></div>';
+    if (cafSince.hoursToNext !== null && cafSince.nextLabel) {
+      html += '<div class="note">עוד <span class="n">' + fmtHM(cafSince.hoursToNext) + '</span> שעות ל' +
+        esc(cafSince.nextLabel) + '.</div>';
+    }
+  }
+
+  /* Two plausible causes the app can see at once — say so rather than let
+     one get blamed confidently. */
+  if (FT.headacheAmbiguous(doc.intakeLog, doc.session ? activeHours() : null)) {
+    html += '<div class="blk warn"><div class="k">אם יש כאב ראש</div><div class="v">' +
+      esc(FT.HEADACHE_NOTE) + '</div></div>';
   }
 
   return html;
 }
 
 function statusCard() {
-  var caf = FT.caffeineNow(doc.intakeLog);
-  var alc = FT.alcoholNow(doc.intakeLog);
-  var hasLive = caf.mg > 0 || alc.units > 0.05;
+  var cafSince = FT.caffeineSince(doc.intakeLog);
+  var alcSince = FT.alcoholSince(doc.intakeLog);
+  /* Relevance is time-since-dose, not amount remaining. Caffeine at 0mg but
+     14h since the last cup is the withdrawal window — the single most useful
+     thing the card can say, and gating on mg > 0 would hide it. */
+  var hasLive = (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) ||
+                (alcSince && alcSince.hours < ALCOHOL_RELEVANT_H);
 
   /* Shown when fasting OR when something is still circulating. Caffeine and
      alcohol are in the body whether or not a timer is running, so gating this

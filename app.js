@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "2.3.0";
+var APP_VERSION = "2.4.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 4;
 
@@ -550,6 +550,86 @@ function isFutureDate(dateStr, todayStr) { return dateStr > (todayStr || todayIS
  *  because "how much is in you now" is meaningless for a past day.
  * ============================================================ */
 
+/* ---- timelines: what to expect at N hours since the last dose ----
+ *
+ * Distinct from caffeineNow()/alcoholNow(), which say how much is still in
+ * you. This says what stage you are in and what people typically feel there —
+ * the thing that explains "last coffee 8 hours ago and I have a headache".
+ *
+ * Withdrawal figures are the well-replicated ones (onset 12-24h, peak 20-51h,
+ * duration 2-9 days). They apply to REGULAR users; an occasional drinker does
+ * not get withdrawal, and the copy says so rather than implying everyone does.
+ */
+var CAFFEINE_TIMELINE = [
+  {
+    from: 0, to: 1, label: "ספיגה",
+    now: "הקפאין נספג. רמת השיא בדם מגיעה בערך 30–60 דקות אחרי השתייה.",
+    feel: "ההשפעה מתחילה להיות מורגשת.",
+    helps: "אם המטרה היא ערנות לפעילות — זה הזמן."
+  },
+  {
+    from: 1, to: 5, label: "שיא ההשפעה",
+    now: "רוב הקפאין עדיין בגוף וחוסם קולטני אדנוזין.",
+    feel: "ערנות, לפעמים גם דופק מהיר יותר או חוסר שקט.",
+    helps: "לשתות מים. קפאין נוסף עכשיו בעיקר יידחה את הירידה, לא יגביר אותה."
+  },
+  {
+    from: 5, to: 10, label: "ירידה",
+    now: "בערך חצי מהקפאין כבר פונה. האדנוזין שהצטבר בינתיים נקשר לקולטנים שהתפנו.",
+    feel: "כאן מגיעה \"הנפילה\" שהרבה מדווחים עליה: עייפות פתאומית, ולפעמים כאב ראש קל.",
+    helps: "מים. אם זה שעה מוקדמת — כוס נוספת אפשרית; אם זה אחר הצהריים, היא תיפגע בשינה."
+  },
+  {
+    from: 10, to: 24, label: "חלון תחילת גמילה",
+    now: "כמעט כל הקפאין פונה. אצל מי ששותה קפה באופן קבוע, זה החלון שבו תסמיני גמילה מתחילים — בדרך כלל 12 עד 24 שעות אחרי המנה האחרונה.",
+    feel: "כאב ראש הוא התסמין הנפוץ ביותר, ומופיע אצל כמחצית ממי שנגמל. לצידו עייפות, קושי בריכוז, עצבנות ומצב רוח ירוד. מי ששותה קפה רק מדי פעם לא אמור להרגיש את זה.",
+    helps: "מים, ואם אתה בצום — גם מלח: חוסר נתרן גורם לכאב ראש דומה, וקל לבלבל בין השניים. כוס קפה תפסיק את זה תוך כחצי שעה, אבל גם תאפס את השעון."
+  },
+  {
+    from: 24, to: 51, label: "שיא הגמילה",
+    now: "אין קפאין בגוף. אם יש גמילה, זה בדרך כלל השלב החזק שלה.",
+    feel: "כאב ראש, עייפות ותחושה דמוית שפעת קלה. חולף מעצמו.",
+    helps: "מים, מנוחה, ומשככי כאבים רגילים אם צריך."
+  },
+  {
+    from: 51, to: Infinity, label: "אחרי הגמילה",
+    now: "תסמיני גמילה נמשכים בדרך כלל בין יומיים לתשעה ימים ואז נעלמים. הסבילות לקפאין יורדת חזרה.",
+    feel: "בדרך כלל שום דבר מיוחד.",
+    helps: "אם תחזור לקפה, המנה הראשונה תרגיש חזקה יותר מכפי שהיא."
+  }
+];
+
+var ALCOHOL_TIMELINE = [
+  {
+    from: 0, to: 1.5, label: "ספיגה ושיא",
+    now: "רמת האלכוהול בדם מגיעה לשיא בערך 30–90 דקות אחרי השתייה.",
+    feel: "ההשפעה הכי חזקה.",
+    helps: "מים לצד כל מנה. לא לנהוג."
+  },
+  {
+    from: 1.5, to: 6, label: "פינוי",
+    now: "הכבד מפנה בערך מנה אחת בשעה. כל עוד יש אלכוהול בדם, חמצון השומן מדוכא.",
+    feel: "ההשפעה נחלשת בהדרגה. תיאבון מוגבר זה חלק מזה.",
+    helps: "מים. אם זה לפני השינה — כדאי לדעת שהשינה תיפגע גם אם תירדם מהר."
+  },
+  {
+    from: 6, to: 16, label: "השפעת לילה והתאוששות",
+    now: "האלכוהול כבר פונה, אבל ההשפעה על השינה נמשכת: הוא מדכא שנת REM בחצי הראשון של הלילה וגורם לשינה מקוטעת בחצי השני.",
+    feel: "עייפות למרות שעות שינה מלאות, יובש, כאב ראש. תסמיני ההנגאובר מגיעים לשיא דווקא כשהאלכוהול כבר ירד לאפס.",
+    helps: "מים ומלח. אוכל. אם אתה בצום — לשקול לדחות אותו, גוף מיובש וצום לא הולכים טוב יחד."
+  },
+  {
+    from: 16, to: Infinity, label: "חזרה לקו הבסיס",
+    now: "ההשפעות המטבוליות והשינתיות חלפו.",
+    feel: "בדרך כלל שום דבר.",
+    helps: "—"
+  }
+];
+
+/* Common non-obvious confusions worth surfacing rather than letting the user
+ * misattribute. Keyed to the state the app can actually observe. */
+var HEADACHE_NOTE = "כאב ראש עכשיו יכול להיות משתי סיבות שונות, והאפליקציה לא יכולה לדעת איזו: ירידה ברמת הקפאין, או חוסר נתרן מהצום. קורט מלח במים בודק את השנייה תוך כ-20 דקות.";
+
 var CAFFEINE_HALF_LIFE_H = 5;   // typical; real range ~3-7h between people
 var CAFFEINE_SLEEP_MG = 30;     // rough threshold where a dose stops mattering for sleep
 var ALCOHOL_CLEAR_PER_H = 1;    // standard drinks cleared per hour, approx
@@ -640,6 +720,67 @@ function caffeineNow(log, nowMs) {
     clearAtMs: now + hoursToThreshold * 3600000,
     hoursToThreshold: +hoursToThreshold.toFixed(2)
   };
+}
+
+/* Hours since the last real (non-backdated) dose of a group of items.
+ * Returns null when there has never been one. */
+function hoursSinceLast(log, keys, nowMs) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  var last = null;
+  (log || []).forEach(function (e) {
+    if (!e || !isFinite(e.at) || e.approx) return;
+    if (keys.indexOf(e.key) === -1) return;
+    if (e.at > now) return;
+    if (last === null || e.at > last) last = e.at;
+  });
+  if (last === null) return null;
+  return { at: last, hours: (now - last) / 3600000 };
+}
+
+function timelineStage(timeline, hours) {
+  if (hours === null || !isFinite(hours)) return null;
+  for (var i = 0; i < timeline.length; i++) {
+    if (hours >= timeline[i].from && hours < timeline[i].to) return timeline[i];
+  }
+  return timeline[timeline.length - 1];
+}
+
+var CAFFEINE_KEYS = ["coffeeBlack", "coffeeMilk"];
+var ALCOHOL_KEYS = ["alcohol"];
+
+/* "Last coffee 8 hours ago" + what stage that is + what people feel there. */
+function caffeineSince(log, nowMs) {
+  var s = hoursSinceLast(log, CAFFEINE_KEYS, nowMs);
+  if (!s) return null;
+  var stage = timelineStage(CAFFEINE_TIMELINE, s.hours);
+  var next = CAFFEINE_TIMELINE[CAFFEINE_TIMELINE.indexOf(stage) + 1] || null;
+  return {
+    at: s.at, hours: +s.hours.toFixed(2), stage: stage,
+    nextLabel: next ? next.label : null,
+    hoursToNext: next && isFinite(stage.to) ? +(stage.to - s.hours).toFixed(2) : null
+  };
+}
+
+function alcoholSince(log, nowMs) {
+  var s = hoursSinceLast(log, ALCOHOL_KEYS, nowMs);
+  if (!s) return null;
+  var stage = timelineStage(ALCOHOL_TIMELINE, s.hours);
+  var next = ALCOHOL_TIMELINE[ALCOHOL_TIMELINE.indexOf(stage) + 1] || null;
+  return {
+    at: s.at, hours: +s.hours.toFixed(2), stage: stage,
+    nextLabel: next ? next.label : null,
+    hoursToNext: next && isFinite(stage.to) ? +(stage.to - s.hours).toFixed(2) : null
+  };
+}
+
+/* True when a headache now has two plausible causes the app can see at once:
+ * caffeine falling AND a fast deep enough to be flushing sodium. Surfaced so
+ * the user doesn't confidently blame the wrong one. */
+function headacheAmbiguous(log, fastingHours, nowMs) {
+  var c = caffeineSince(log, nowMs);
+  var caffeineFalling = !!c && c.hours >= 5;
+  var sodiumWindow = isFinite(fastingHours) && fastingHours >= 10;
+  return caffeineFalling && sodiumWindow;
 }
 
 /* Standard drinks still to clear, at roughly one per hour.
@@ -838,6 +979,10 @@ window.FT = {
   addIntakeEvent: addIntakeEvent, removeIntakeEvent: removeIntakeEvent,
   intakeEvents: intakeEvents, dayBounds: dayBounds,
   caffeineNow: caffeineNow, alcoholNow: alcoholNow,
+  caffeineSince: caffeineSince, alcoholSince: alcoholSince,
+  hoursSinceLast: hoursSinceLast, timelineStage: timelineStage,
+  headacheAmbiguous: headacheAmbiguous, HEADACHE_NOTE: HEADACHE_NOTE,
+  CAFFEINE_TIMELINE: CAFFEINE_TIMELINE, ALCOHOL_TIMELINE: ALCOHOL_TIMELINE,
   CAFFEINE_HALF_LIFE_H: CAFFEINE_HALF_LIFE_H, CAFFEINE_SLEEP_MG: CAFFEINE_SLEEP_MG,
   intakeOn: intakeOn, intakeTotals: intakeTotals,
   intakeByWeek: intakeByWeek, intakeObservation: intakeObservation,
