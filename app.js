@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "2.4.0";
+var APP_VERSION = "2.5.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 4;
 
@@ -626,6 +626,37 @@ var ALCOHOL_TIMELINE = [
   }
 ];
 
+/* Meat is measured in days, not hours: the short-term effects are one meal
+ * long, and the thing that actually matters over a week is whether protein is
+ * adequate in a deficit. The app CANNOT see that — it tracks meat, not
+ * protein — so the multi-day copy says so instead of implying a shortfall. */
+var MEAT_TIMELINE = [
+  {
+    from: 0, to: 4, label: "עיכול",
+    now: "חלבון מתעכל לאט יחסית, והאפקט התרמי שלו פעיל עכשיו: חלק ניכר מהקלוריות נשרפות על העיכול עצמו.",
+    feel: "שובע ממושך יותר מאשר אחרי ארוחה עתירת פחמימות.",
+    helps: "—"
+  },
+  {
+    from: 4, to: 24, label: "אחרי הארוחה",
+    now: "ההשפעה הישירה נגמרה. חומצות האמינו נכנסו למחזור ומשמשות לתחזוקת רקמות.",
+    feel: "שום דבר מיוחד.",
+    helps: "—"
+  },
+  {
+    from: 24, to: 72, label: "יום-שלושה",
+    now: "אין כאן שלב פיזיולוגי — הגוף לא סופר ימים מאז בשר. מה שכן חשוב בגירעון קלורי הוא סך החלבון היומי, לא המקור שלו.",
+    feel: "שום דבר שנובע מזה.",
+    helps: "האפליקציה עוקבת אחרי בשר בלבד ולא רואה ביצים, דגים, מוצרי חלב או קטניות. אם החלבון מגיע משם — המספר הזה לא אומר כלום."
+  },
+  {
+    from: 72, to: Infinity, label: "מעל שלושה ימים",
+    now: "בגירעון קלורי, חלבון מספיק הוא מה ששומר על מסת שריר — כלומר מה שגורם לירידה להיות בשומן ולא בשריר.",
+    feel: "אין תסמין ישיר. אם הירידה במשקל ממשיכה אבל המותן עומדת, זה סימן ששווה לבדוק.",
+    helps: "האפליקציה לא יודעת כמה חלבון אכלת, רק כמה בשר. אם אתה מקבל חלבון ממקורות אחרים, אין כאן שום בעיה."
+  }
+];
+
 /* Common non-obvious confusions worth surfacing rather than letting the user
  * misattribute. Keyed to the state the app can actually observe. */
 var HEADACHE_NOTE = "כאב ראש עכשיו יכול להיות משתי סיבות שונות, והאפליקציה לא יכולה לדעת איזו: ירידה ברמת הקפאין, או חוסר נתרן מהצום. קורט מלח במים בודק את השנייה תוך כ-20 דקות.";
@@ -724,11 +755,12 @@ function caffeineNow(log, nowMs) {
 
 /* Hours since the last real (non-backdated) dose of a group of items.
  * Returns null when there has never been one. */
-function hoursSinceLast(log, keys, nowMs) {
+function hoursSinceLast(log, keys, nowMs, includeApprox) {
   var now = isFinite(nowMs) ? nowMs : Date.now();
   var last = null;
   (log || []).forEach(function (e) {
-    if (!e || !isFinite(e.at) || e.approx) return;
+    if (!e || !isFinite(e.at)) return;
+    if (e.approx && !includeApprox) return;
     if (keys.indexOf(e.key) === -1) return;
     if (e.at > now) return;
     if (last === null || e.at > last) last = e.at;
@@ -771,6 +803,87 @@ function alcoholSince(log, nowMs) {
     nextLabel: next ? next.label : null,
     hoursToNext: next && isFinite(stage.to) ? +(stage.to - s.hours).toFixed(2) : null
   };
+}
+
+var MEAT_KEYS = ["meat"];
+
+/* Includes backdated entries, unlike caffeineSince/alcoholSince. Those drive
+ * hour-scale pharmacokinetics where a missing time would fabricate precision;
+ * this timeline is measured in days, where "logged on Tuesday" is exact
+ * enough. Excluding them made a meat entry added via quick-backfill vanish
+ * from the status card entirely. */
+function meatSince(log, nowMs) {
+  var s = hoursSinceLast(log, MEAT_KEYS, nowMs, true);
+  if (!s) return null;
+  var stage = timelineStage(MEAT_TIMELINE, s.hours);
+  return { at: s.at, hours: +s.hours.toFixed(2), days: +(s.hours / 24).toFixed(2), stage: stage };
+}
+
+/* One line per tracked substance: how long since the last one, and the stage
+ * that puts you in. This is the "coffee this morning, meat 3 days ago,
+ * alcohol a week ago" view — a single read across all three.
+ *
+ * Backdated events are excluded from the LIVE pharmacokinetics but included
+ * here: "you last logged meat on Tuesday" is true regardless of whether the
+ * exact hour was recorded. `approxOnly` marks rows where that is the case, so
+ * the UI can avoid implying minute-level precision. */
+function intakeSummary(log, nowMs) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  var groups = [
+    { id: "caffeine", label: "קפה", keys: CAFFEINE_KEYS, timeline: CAFFEINE_TIMELINE },
+    { id: "alcohol", label: "אלכוהול", keys: ALCOHOL_KEYS, timeline: ALCOHOL_TIMELINE },
+    { id: "meat", label: "בשר", keys: MEAT_KEYS, timeline: MEAT_TIMELINE }
+  ];
+
+  return groups.map(function (g) {
+    var lastAny = null, lastExact = null;
+    (log || []).forEach(function (e) {
+      if (!e || !isFinite(e.at) || e.at > now) return;
+      if (g.keys.indexOf(e.key) === -1) return;
+      if (lastAny === null || e.at > lastAny) lastAny = e.at;
+      if (!e.approx && (lastExact === null || e.at > lastExact)) lastExact = e.at;
+    });
+    if (lastAny === null) {
+      return { id: g.id, label: g.label, ever: false, hours: null, days: null, stage: null, approxOnly: false };
+    }
+    var hours = (now - lastAny) / 3600000;
+    return {
+      id: g.id, label: g.label, ever: true,
+      at: lastAny, hours: +hours.toFixed(2), days: Math.floor(hours / 24),
+      approxOnly: lastExact === null || lastExact < lastAny,
+      stage: timelineStage(g.timeline, hours),
+      todayCount: intakeCountsOn(log, todayISO())[g.keys[0]] +
+        (g.keys[1] ? intakeCountsOn(log, todayISO())[g.keys[1]] : 0)
+    };
+  });
+}
+
+/* Consecutive whole days with none logged, counting back from yesterday.
+ * Today is excluded from the COUNT — a day still in progress is not yet a
+ * clean day — but something logged today breaks the streak outright, which
+ * is why today is checked first. Without that check, a coffee this morning
+ * still reported a streak, because scanning backwards never found it.
+ *
+ * Returns null when the item has never been logged: "0 clean days" and
+ * "never touched it" are different statements and must not look alike. */
+function abstinenceDays(log, keys, nowMs) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  var everLogged = (log || []).some(function (e) {
+    return e && isFinite(e.at) && keys.indexOf(e.key) !== -1;
+  });
+  if (!everLogged) return null;
+
+  var todayCounts = intakeCountsOn(log, todayISO(new Date(now)));
+  if (keys.some(function (k) { return (todayCounts[k] || 0) > 0; })) return 0;
+
+  var days = 0;
+  for (var i = 1; i <= 400; i++) {
+    var d = new Date(now); d.setDate(d.getDate() - i);
+    var counts = intakeCountsOn(log, todayISO(d));
+    if (keys.some(function (k) { return (counts[k] || 0) > 0; })) break;
+    days++;
+  }
+  return days;
 }
 
 /* True when a headache now has two plausible causes the app can see at once:
@@ -979,7 +1092,10 @@ window.FT = {
   addIntakeEvent: addIntakeEvent, removeIntakeEvent: removeIntakeEvent,
   intakeEvents: intakeEvents, dayBounds: dayBounds,
   caffeineNow: caffeineNow, alcoholNow: alcoholNow,
-  caffeineSince: caffeineSince, alcoholSince: alcoholSince,
+  caffeineSince: caffeineSince, alcoholSince: alcoholSince, meatSince: meatSince,
+  intakeSummary: intakeSummary, abstinenceDays: abstinenceDays,
+  MEAT_TIMELINE: MEAT_TIMELINE, MEAT_KEYS: MEAT_KEYS,
+  CAFFEINE_KEYS: CAFFEINE_KEYS, ALCOHOL_KEYS: ALCOHOL_KEYS,
   hoursSinceLast: hoursSinceLast, timelineStage: timelineStage,
   headacheAmbiguous: headacheAmbiguous, HEADACHE_NOTE: HEADACHE_NOTE,
   CAFFEINE_TIMELINE: CAFFEINE_TIMELINE, ALCOHOL_TIMELINE: ALCOHOL_TIMELINE,

@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.4.0
+# FastTrack — human test plan v2.5.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.4.0`. If it doesn't, you're on a cached page and every result below is
+read `v2.5.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `125 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `136 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.4.0`
+Version footer checked: ☐ `v2.5.0`
 
 ---
 
-## 10 · Intake ⚠️ *new in v2.4.0*
+## 10 · Intake ⚠️ *new in v2.5.0*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -171,7 +171,7 @@ Version footer checked: ☐ `v2.4.0`
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
 
-## 12 · Live body status ⚠️ *new in v2.4.0*
+## 12 · Live body status ⚠️ *new in v2.5.0*
 
 36. With no coffee or alcohol logged today and no fast running, look for the
     "מה קורה עכשיו בגוף" card.
@@ -198,7 +198,7 @@ Version footer checked: ☐ `v2.4.0`
     **Expect:** the daily and weekly counts include it, but the live caffeine
     figure does **not** move. A dose with no real time can't be circulating now.
 
-## 13 · Since-last-dose ⚠️ *new in v2.4.0*
+## 13 · Since-last-dose ⚠️ *new in v2.5.0*
 
 43. Log a coffee, then look at "מה קורה עכשיו בגוף".
     **Expect:** a heading like `קפאין · לפני 3 דק׳ · ספיגה`, with what's
@@ -225,3 +225,37 @@ Version footer checked: ☐ `v2.4.0`
     peak *after* the alcohol has already cleared.
 50. With no coffee or alcohol in the last 3 days and no fast running.
     **Expect:** the card is absent entirely. Nothing to say.
+
+## 14 · All three at a glance ⚠️ *new in v2.5.0*
+
+51. Open the app with coffee logged today, meat a few days back and alcohol
+    over a week back.
+    **Expect:** a summary box at the top of "מה קורה עכשיו בגוף" with one row
+    per substance — label, how long ago, stage, and either today's count or a
+    clean-day streak.
+52. Check the alcohol row.
+    **Expect:** `לפני 7 ימים · חזרה לקו הבסיס · 6 ימים נקיים`. ⚠️ Days, not
+    hours — before this version anything past 16 hours vanished entirely.
+53. Check the coffee row on a day you've had one.
+    **Expect:** it shows today's count, not a clean-day streak. ⚠️ A streak
+    alongside a coffee you drank this morning is the bug this was written for.
+54. Look for the `*` marks and the note under the box.
+    **Expect:** rows whose last entry was backfilled carry `*`, and the note
+    says the day is known but not the hour.
+55. Scroll to the meat block.
+    **Expect:** ⚠️ it states the app tracks meat and not protein, and that if
+    protein is coming from eggs, fish or dairy the number means nothing. If it
+    implies you're short on protein, that's a failure — it cannot know that.
+
+## 15 · Quick backfill ⚠️ *new in v2.5.0*
+
+56. Under any intake item, tap "+ ליום קודם".
+    **Expect:** a row of chips, 1 to 7 days.
+57. Tap "3 ימים".
+    **Expect:** a toast confirming the date, the chips close, and the summary
+    row updates to "לפני 3 ימים".
+58. Check the same entry in the weekly צריכה מול מגמה table.
+    **Expect:** it counts toward that week.
+59. Check the live caffeine figure after backfilling a coffee.
+    **Expect:** ⚠️ it does **not** move. A backfilled entry has no real time,
+    so it can't be circulating now.

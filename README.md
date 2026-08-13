@@ -26,6 +26,11 @@ device and leaves it only through a JSON export you trigger yourself.
 
   When a headache has two plausible causes the app can see at once — falling
   caffeine and sodium loss from fasting — it names both rather than guessing.
+
+  A summary line covers all three at once — "coffee 5 hours ago, meat 3 days,
+  alcohol a week" — with clean-day counts. Backfilling a past day is one tap
+  per item. Note the app tracks *meat*, not protein: it can't see eggs, fish
+  or dairy, and says so instead of implying a shortfall it can't observe.
 - **Pace** — required vs. actual kg/week and a projection to the next goal.
 
 ## What it deliberately does not do
@@ -73,4 +78,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.4.0.md` | Human pass |
+| `tests/TEST-PLAN-v2.5.0.md` | Human pass |

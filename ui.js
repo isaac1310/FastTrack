@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.4.0).
+/* FastTrack — UI layer (v2.5.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -27,6 +27,7 @@ var view = {
   showIntakeInfo: false,
   intakeDate: null,
   showBackdate: false,
+  backfillKey: null,
   backdateValue: null,
   bannerDismissed: {},
   toastAction: null,
@@ -88,6 +89,12 @@ function seedDemo(kind) {
   d.intakeLog.push({ at: now - 70 * 60000, key: "coffeeBlack", approx: false });
   d.intakeLog.push({ at: now - 5.5 * 3600000, key: "coffeeBlack", approx: false });
   if (kind === "behind") d.intakeLog.push({ at: now - 40 * 60000, key: "alcohol", approx: false });
+  // multi-day gaps, so the summary has something to say across all three
+  d.intakeLog = d.intakeLog.filter(function (e) {
+    if (e.key === "meat" && e.at > now - 3 * 86400000) return false;
+    if (e.key === "alcohol" && !e.approx === false && e.at > now - 7 * 86400000) return false;
+    return true;
+  });
   d.intakeLog.sort(function (a, b) { return a.at - b.at; });
   d.fastHistory = [
     { start: now - 4 * 86400000 - 17 * 3600000, end: now - 4 * 86400000, protocolHours: 16 },
@@ -357,6 +364,51 @@ function sinceLabel(hours) {
 var CAFFEINE_RELEVANT_H = 72;  // withdrawal can still be running at 2-3 days
 var ALCOHOL_RELEVANT_H = 16;   // through the recovery/hangover window
 
+/* "לפני 3 ימים" / "לפני 4:20 שעות" / "לפני 12 דק׳" */
+function agoLabel(hours) {
+  if (hours === null || !isFinite(hours)) return "—";
+  if (hours < 1) return "לפני " + Math.round(hours * 60) + " דק׳";
+  if (hours < 24) return "לפני " + fmtHM(hours) + " שעות";
+  var d = Math.floor(hours / 24);
+  return "לפני " + d + (d === 1 ? " יום" : " ימים");
+}
+
+/* One row per substance: how long since the last one, and the stage.
+   This is the "coffee this morning, meat 3 days ago, alcohol a week ago"
+   read — all three at a glance, before any of the detail. */
+function intakeSummaryBlock() {
+  var rows = FT.intakeSummary(doc.intakeLog);
+  var any = rows.some(function (r) { return r.ever; });
+  if (!any) return "";
+
+  var html = '<div class="summaryGrid" id="intakeSummary">';
+  rows.forEach(function (r) {
+    if (!r.ever) {
+      html += '<div class="sumRow"><span class="sumLabel">' + esc(r.label) + '</span>' +
+        '<span class="sumAgo dim">לא נרשם</span>' +
+        '<span class="sumStage dim">—</span></div>';
+      return;
+    }
+    var clean = FT.abstinenceDays(doc.intakeLog,
+      r.id === "caffeine" ? FT.CAFFEINE_KEYS : (r.id === "alcohol" ? FT.ALCOHOL_KEYS : FT.MEAT_KEYS));
+    var extra = "";
+    if (r.todayCount > 0) extra = n(r.todayCount) + " היום";
+    else if (clean !== null && clean > 0) extra = n(clean) + (clean === 1 ? " יום נקי" : " ימים נקיים");
+
+    html += '<div class="sumRow">' +
+      '<span class="sumLabel">' + esc(r.label) + '</span>' +
+      '<span class="sumAgo n">' + agoLabel(r.hours) + (r.approxOnly ? '<span class="dim">*</span>' : '') + '</span>' +
+      '<span class="sumStage">' + esc(r.stage.label) + (extra ? ' <span class="dim">· ' + extra + '</span>' : '') + '</span>' +
+      '</div>';
+  });
+  html += '</div>';
+
+  if (rows.some(function (r) { return r.ever && r.approxOnly; })) {
+    html += '<div class="note">' + n("*") + ' נרשם ללא שעה מדויקת — היום ידוע, השעה לא.</div>';
+  }
+  return html;
+}
+
 function liveIntakeBlocks() {
   var caf = FT.caffeineNow(doc.intakeLog);
   var alc = FT.alcoholNow(doc.intakeLog);
@@ -403,6 +455,15 @@ function liveIntakeBlocks() {
     }
   }
 
+  /* ---- meat: days, not hours. Only worth showing past a day, because
+     under that the fasting phase card already covers the meal. ---- */
+  var meat = FT.meatSince(doc.intakeLog);
+  if (meat && meat.hours >= 24) {
+    html += '<div class="blk"><div class="k">בשר · ' + agoLabel(meat.hours) +
+      ' · ' + esc(meat.stage.label) + '</div><div class="v">' + esc(meat.stage.now) + '</div></div>';
+    html += '<div class="blk"><div class="k">מה זה אומר</div><div class="v">' + esc(meat.stage.helps) + '</div></div>';
+  }
+
   /* Two plausible causes the app can see at once — say so rather than let
      one get blamed confidently. */
   if (FT.headacheAmbiguous(doc.intakeLog, doc.session ? activeHours() : null)) {
@@ -419,7 +480,9 @@ function statusCard() {
   /* Relevance is time-since-dose, not amount remaining. Caffeine at 0mg but
      14h since the last cup is the withdrawal window — the single most useful
      thing the card can say, and gating on mg > 0 would hide it. */
-  var hasLive = (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) ||
+  var everAny = FT.intakeSummary(doc.intakeLog).some(function (r) { return r.ever; });
+  var hasLive = everAny ||
+                (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) ||
                 (alcSince && alcSince.hours < ALCOHOL_RELEVANT_H);
 
   /* Shown when fasting OR when something is still circulating. Caffeine and
@@ -432,6 +495,7 @@ function statusCard() {
     '<div class="cardTitle">מה קורה עכשיו בגוף</div>' +
     '<div class="hint">' + (doc.session ? "גבולות טיפוסיים, לא אישיים" : "הערכה") + '</div></div>';
 
+  html += intakeSummaryBlock();
   html += '<div class="blocks" id="liveBlocks">' + liveIntakeBlocks() + '</div>';
 
   if (doc.session) {
@@ -776,6 +840,18 @@ function logCard() {
 /* ============================================================ *
  *  Intake — coffee, alcohol, meat
  * ============================================================ */
+function lastOf(key) {
+  var s = FT.hoursSinceLast(doc.intakeLog, [key]);
+  if (s) return s.hours;
+  // fall back to including backdated entries, which have no exact time but a
+  // known day — "last logged 3 days ago" is still true
+  var last = null;
+  (doc.intakeLog || []).forEach(function (e) {
+    if (e && e.key === key && isFinite(e.at) && (last === null || e.at > last)) last = e.at;
+  });
+  return last === null ? null : (Date.now() - last) / 3600000;
+}
+
 function intakeCard() {
   var date = view.intakeDate || FT.todayISO();
   var isToday = date === FT.todayISO();
@@ -795,12 +871,28 @@ function intakeCard() {
       '<span style="display:flex;flex-direction:column;gap:1px;min-width:0">' +
       '<span style="font-size:14px;font-weight:500">' + esc(it.label) + '</span>' +
       '<span style="font-size:11px;color:var(--dim)">' + esc(it.unit) +
-      (it.breaksFast ? ' · שובר צום' : ' · לא שובר צום') + '</span></span>' +
+      (it.breaksFast ? ' · שובר צום' : ' · לא שובר צום') +
+      (lastOf(it.key) ? ' · אחרון ' + agoLabel(lastOf(it.key)) : '') + '</span>' +
+      '<button class="linkBtn" style="font-size:11px;text-align:start" data-backfill-open="' + it.key + '">+ ליום קודם</button>' +
+      '</span>' +
       '<span class="stepper">' +
       '<button class="stepBtn" data-intake-dec="' + it.key + '" aria-label="פחות">−</button>' +
       '<span class="stepVal n" id="intakeVal_' + it.key + '">' + c + '</span>' +
       '<button class="stepBtn" data-intake-inc="' + it.key + '" aria-label="עוד">+</button>' +
       '</span></div>';
+
+    /* Quick backfill. Logging "meat, 3 days ago" through the date picker at
+       the top meant changing the date, tapping, then changing it back — four
+       interactions for one entry. These are one tap each. */
+    if (view.backfillKey === it.key) {
+      html += '<div class="backfill">';
+      for (var bd = 1; bd <= 7; bd++) {
+        var bdate = new Date(); bdate.setDate(bdate.getDate() - bd);
+        html += '<button class="chip" data-backfill-day="' + bd + '" data-backfill-key="' + it.key + '">' +
+          '<span class="n">' + bd + '</span>' + (bd === 1 ? " יום" : " ימים") + '</button>';
+      }
+      html += '<button class="linkBtn muted" id="cancelBackfill">ביטול</button></div>';
+    }
   });
   html += '</div>';
 
@@ -1197,6 +1289,32 @@ function wire() {
   on("intakeDate", function (e) { view.intakeDate = e.target.value; render(); }, "change");
   on("intakeToday", function () { view.intakeDate = null; render(); });
   on("intakeInfoToggle", function () { view.showIntakeInfo = !view.showIntakeInfo; render(); });
+  each("[data-backfill-open]", function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute("data-backfill-open");
+      view.backfillKey = view.backfillKey === k ? null : k;
+      render();
+    };
+  });
+  on("cancelBackfill", function () { view.backfillKey = null; render(); });
+  each("[data-backfill-day]", function (b) {
+    b.onclick = function () {
+      var days = Number(b.getAttribute("data-backfill-day"));
+      var key = b.getAttribute("data-backfill-key");
+      var d = new Date(); d.setDate(d.getDate() - days);
+      var iso = FT.todayISO(d);
+      // no exact time for a past day, so noon + approx — same rule as the
+      // migrated v3 counts, and excluded from the live estimates
+      var r = FT.addIntakeEvent(doc.intakeLog, key, new Date(iso + "T12:00:00").getTime(), true);
+      if (!r.added) return;
+      doc.intakeLog = r.log;
+      view.backfillKey = null;
+      var ok = persist();
+      render();
+      showToast(ok ? FT.intakeItem(key).label + " נרשם ל" + fmtDate(iso)
+                   : "לא ניתן לשמור במכשיר הזה");
+    };
+  });
   each("[data-intake-inc]", function (b) {
     b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
   });
