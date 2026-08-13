@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.5.0
+# FastTrack — human test plan v2.5.1
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.5.0`. If it doesn't, you're on a cached page and every result below is
+read `v2.5.1`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `136 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `139 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.5.0`
+Version footer checked: ☐ `v2.5.1`
 
 ---
 
-## 10 · Intake ⚠️ *new in v2.5.0*
+## 10 · Intake ⚠️ *new in v2.5.1*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -171,7 +171,7 @@ Version footer checked: ☐ `v2.5.0`
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
 
-## 12 · Live body status ⚠️ *new in v2.5.0*
+## 12 · Live body status ⚠️ *new in v2.5.1*
 
 36. With no coffee or alcohol logged today and no fast running, look for the
     "מה קורה עכשיו בגוף" card.
@@ -198,7 +198,7 @@ Version footer checked: ☐ `v2.5.0`
     **Expect:** the daily and weekly counts include it, but the live caffeine
     figure does **not** move. A dose with no real time can't be circulating now.
 
-## 13 · Since-last-dose ⚠️ *new in v2.5.0*
+## 13 · Since-last-dose ⚠️ *new in v2.5.1*
 
 43. Log a coffee, then look at "מה קורה עכשיו בגוף".
     **Expect:** a heading like `קפאין · לפני 3 דק׳ · ספיגה`, with what's
@@ -226,7 +226,7 @@ Version footer checked: ☐ `v2.5.0`
 50. With no coffee or alcohol in the last 3 days and no fast running.
     **Expect:** the card is absent entirely. Nothing to say.
 
-## 14 · All three at a glance ⚠️ *new in v2.5.0*
+## 14 · All three at a glance ⚠️ *new in v2.5.1*
 
 51. Open the app with coffee logged today, meat a few days back and alcohol
     over a week back.
@@ -247,15 +247,28 @@ Version footer checked: ☐ `v2.5.0`
     protein is coming from eggs, fish or dairy the number means nothing. If it
     implies you're short on protein, that's a failure — it cannot know that.
 
-## 15 · Quick backfill ⚠️ *new in v2.5.0*
+## 15 · Logging to a past day
 
-56. Under any intake item, tap "+ ליום קודם".
-    **Expect:** a row of chips, 1 to 7 days.
-57. Tap "3 ימים".
-    **Expect:** a toast confirming the date, the chips close, and the summary
-    row updates to "לפני 3 ימים".
-58. Check the same entry in the weekly צריכה מול מגמה table.
-    **Expect:** it counts toward that week.
-59. Check the live caffeine figure after backfilling a coffee.
-    **Expect:** ⚠️ it does **not** move. A backfilled entry has no real time,
-    so it can't be circulating now.
+56. In the צריכה card, change the date at the top to a few days back.
+    **Expect:** ⚠️ the card gets a gold border and a banner saying which date
+    you are logging to, with a "חזרה להיום" link. If that is not obvious, the
+    failure mode is tapping + while the date is still on last Tuesday.
+57. Tap + on any item.
+    **Expect:** it records against the chosen date, not today. Check the
+    summary row at the top of the body card updates.
+58. Tap "חזרה להיום".
+    **Expect:** the picker resets, the border and banner go away.
+59. Check the live caffeine figure after logging a coffee to a past day.
+    **Expect:** ⚠️ it does **not** move. A past-day entry has no real time, so
+    it cannot be circulating now.
+
+## 16 · The backup notice ⚠️ *changed in v2.5.1*
+
+60. With data logged and no recent export, look for the "data is only on this
+    device" banner and tap "הבנתי".
+61. Close the app and reopen it.
+    **Expect:** ⚠️ the banner does **not** come back. Before this it returned
+    on every load, which is a nag rather than a warning.
+62. Open the settings card.
+    **Expect:** the backup status is still there and still says plainly that
+    you haven't exported. Dismissing the banner must not hide the fact.

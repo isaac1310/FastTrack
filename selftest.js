@@ -875,6 +875,27 @@
     });
 
     /* ================= storage ================= */
+    group("banner dismissal");
+    check("dismissals live in the document, so they survive a reload", function () {
+      // it was transient view state, so the "data is only on this device"
+      // notice came back on every open — a nag, not a warning
+      var d = FT.emptyDoc();
+      if (!d.dismissed || typeof d.dismissed !== "object") return "emptyDoc has no dismissed map";
+      d.dismissed.backup = "2026-08-13T10:00:00Z";
+      var round = FT.normalizeDoc(JSON.parse(JSON.stringify(d)));
+      return round.dismissed.backup === "2026-08-13T10:00:00Z"
+        ? true : "dismissal did not survive a round-trip";
+    });
+    check("a document with no dismissed map is repaired, not crashed on", function () {
+      var r = FT.normalizeDoc({ schemaVersion: FT.SCHEMA_VERSION });
+      return r.dismissed && typeof r.dismissed === "object"
+        ? true : "dismissed not repaired";
+    });
+    check("dismissing does not disable the underlying staleness check", function () {
+      // the banner goes away; the settings card must still be able to say so
+      return eq(FT.backupStale(null, Date.now()), true, "backupStale");
+    });
+
     group("storage");
     check("lsSet reports failure instead of throwing", function () {
       // Not writable in this environment? Then this check must SAY so, not pass silently.
