@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.5.1
+# FastTrack — human test plan v2.6.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.5.1`. If it doesn't, you're on a cached page and every result below is
+read `v2.6.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `139 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `151 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.5.1`
+Version footer checked: ☐ `v2.6.0`
 
 ---
 
-## 10 · Intake ⚠️ *new in v2.5.1*
+## 10 · Intake ⚠️ *new in v2.6.0*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -171,7 +171,7 @@ Version footer checked: ☐ `v2.5.1`
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
 
-## 12 · Live body status ⚠️ *new in v2.5.1*
+## 12 · Live body status ⚠️ *new in v2.6.0*
 
 36. With no coffee or alcohol logged today and no fast running, look for the
     "מה קורה עכשיו בגוף" card.
@@ -198,7 +198,7 @@ Version footer checked: ☐ `v2.5.1`
     **Expect:** the daily and weekly counts include it, but the live caffeine
     figure does **not** move. A dose with no real time can't be circulating now.
 
-## 13 · Since-last-dose ⚠️ *new in v2.5.1*
+## 13 · Since-last-dose ⚠️ *new in v2.6.0*
 
 43. Log a coffee, then look at "מה קורה עכשיו בגוף".
     **Expect:** a heading like `קפאין · לפני 3 דק׳ · ספיגה`, with what's
@@ -226,7 +226,7 @@ Version footer checked: ☐ `v2.5.1`
 50. With no coffee or alcohol in the last 3 days and no fast running.
     **Expect:** the card is absent entirely. Nothing to say.
 
-## 14 · All three at a glance ⚠️ *new in v2.5.1*
+## 14 · All three at a glance ⚠️ *new in v2.6.0*
 
 51. Open the app with coffee logged today, meat a few days back and alcohol
     over a week back.
@@ -262,7 +262,7 @@ Version footer checked: ☐ `v2.5.1`
     **Expect:** ⚠️ it does **not** move. A past-day entry has no real time, so
     it cannot be circulating now.
 
-## 16 · The backup notice ⚠️ *changed in v2.5.1*
+## 16 · The backup notice ⚠️ *changed in v2.6.0*
 
 60. With data logged and no recent export, look for the "data is only on this
     device" banner and tap "הבנתי".
@@ -272,3 +272,47 @@ Version footer checked: ☐ `v2.5.1`
 62. Open the settings card.
     **Expect:** the backup status is still there and still says plainly that
     you haven't exported. Dismissing the banner must not hide the fact.
+
+## 17 · Save button for past days ⚠️ *new in v2.6.0*
+
+63. Set the intake date to a past day and tap + on any item.
+    **Expect:** the count changes on screen, the stepper gets a gold ring, and
+    a "שמירה ל…" button appears. ⚠️ Nothing is written yet.
+64. Reload before saving.
+    **Expect:** the change is gone. It was staged, not saved.
+65. Repeat and press save.
+    **Expect:** a toast naming the date and the items changed, the ring clears,
+    the button returns to "אין שינוי לשמור" disabled.
+66. Do the same on **today**.
+    **Expect:** no save button at all — today writes on each tap, because the
+    live status reacts immediately and proves it.
+
+## 18 · Meat as a streak ⚠️ *reframed in v2.6.0*
+
+67. With meat logged several days ago, check the summary row.
+    **Expect:** "בשר · לפני 6 ימים · רצף ארוך נקי · 5 ימים נקיים".
+68. Read the meat block.
+    **Expect:** ⚠️ it says slower gastric emptying (measurable), and says
+    plainly that a clean streak is a fact about what you ate and **not** the
+    body cleansing itself. If it claims detoxification or toxin build-up,
+    that's a failure.
+69. On a long meat-free streak, read "מה זה אומר".
+    **Expect:** it raises protein for lean mass in a deficit and admits the app
+    can't see fish, eggs, dairy or legumes.
+
+## 19 · Ayurvedic lens ⚠️ *new in v2.6.0*
+
+70. Look for "מבט איורוודי" and open it.
+    **Expect:** its own card, visually distinct (blue-tinted), collapsed by
+    default, labelled "מסורת · לא רפואה".
+71. Read the note at the top.
+    **Expect:** ⚠️ it states plainly this is a traditional system and not
+    evidence-based medicine in the sense the rest of the app uses. If that
+    line is gone, the card is overclaiming.
+72. Mid-fast, check the dosha line.
+    **Expect:** it describes the *state* — vata rising with a long fast, etc.
+    ⚠️ It must never claim to know your constitution, and there should be no
+    quiz anywhere.
+73. Look for remedies.
+    **Expect:** none. Descriptive only — no herbs, no supplements, no
+    treatment advice.

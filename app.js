@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "2.5.1";
+var APP_VERSION = "2.6.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 4;
 
@@ -92,8 +92,8 @@ var REFEED_NOTE = "אחרי צום ארוך: לשבור בקטן. משהו קל 
  *
  *  Content rule, same as PHASES: state what is established, and say so when
  *  it is not. Caffeine and alcohol have specific, well-replicated physiology.
- *  Meat beyond protein satiety and thermic effect is contested — so it is
- *  not padded out, and it is not moralised.
+ *  Meat's slower gastric emptying and thermic effect are measurable; claims
+ *  about toxins or "cleansing" are not, and are excluded.
  * ============================================================ */
 var INTAKE_ITEMS = [
   {
@@ -122,11 +122,12 @@ var INTAKE_ITEMS = [
   },
   {
     key: "meat", label: "בשר", unit: "מנות", breaksFast: true,
-    now: "חלבון הוא המקרו־נוטריינט המשביע ביותר, ובעל האפקט התרמי הגבוה ביותר.",
+    hint: "בקר, עוף, כבש. דגים קלים יותר לעיכול — תחליט אם לספור אותם",
+    now: "בשר יוצא מהקיבה לאט יותר מפחמימות. השילוב של חלבון ושומן מאט את קצב ההתרוקנות, ולכן הארוחה 'יושבת' זמן רב יותר.",
     fasting: "שובר את הצום.",
-    effect: "בערך 20–30% מהקלוריות שבחלבון נשרפות רק כדי לעכל אותו, לעומת 5–10% בפחמימות ו-0–3% בשומן. בגירעון קלורי חלבון מספיק הוא מה ששומר על מסת שריר — כלומר הוא בדיוק מה שגורם לירידה להיות בשומן ולא בשריר.",
-    timing: "אין תזמון מיוחד שחשוב למעקב הזה.",
-    caution: "מעבר לשובע ולאפקט התרמי, רוב הטענות הבריאותיות על בשר שנויות במחלוקת. העדויות על בשר מעובד חזקות יותר מאלה על בשר אדום לא מעובד. האפליקציה לא נוקטת עמדה מעבר לזה."
+    effect: "כ-20–30% מהקלוריות שבחלבון נשרפות על העיכול עצמו — יותר מכל מקרו אחר. זה גם מה שמשביע לאורך זמן, וגם מה שגורם לתחושת הכובד.",
+    timing: "ארוחה כבדה לפני שינה נשארת בעיכול בזמן שהגוף אמור לנוח. מרווח של כמה שעות עוזר.",
+    caution: "עיכול איטי יותר זה עובדה מדידה. מעבר לזה, טענות על \"ניקוי\" או הצטברות רעלים מבשר אינן מבוססות — האפליקציה סופרת ימים, היא לא מבטיחה ניקיון."
   }
 ];
 
@@ -205,7 +206,7 @@ function migrate(raw, v1entries, v1session) {
     }
     /* v2 → v3 → v4, upgraded in place. Refusing would strand every weigh-in
        already on the phone, and each step is information-preserving. */
-    if (parsed && (parsed.schemaVersion === 2 || parsed.schemaVersion === 3)) {
+    if (parsed && parsed.schemaVersion >= 2 && parsed.schemaVersion < SCHEMA_VERSION) {
       if (parsed.schemaVersion === 2) {
         parsed.intake = Array.isArray(parsed.intake) ? parsed.intake : [];
         parsed.schemaVersion = 3;
@@ -213,17 +214,23 @@ function migrate(raw, v1entries, v1session) {
       if (parsed.schemaVersion === 3) {
         /* v3 stored day counts; v4 stores timestamped events so the live body
            status can decay a dose. Old counts have no time, so they land at
-           noon flagged approx: they still count toward daily and weekly
-           totals but are excluded from "how much is in you now", which is
-           meaningless for a past day anyway. Nothing is dropped. */
+           noon flagged approx: they still count toward daily and weekly totals
+           but are excluded from "how much is in you now", which is meaningless
+           for a past day anyway. Nothing is dropped.
+
+           Keys are listed explicitly, by the name the OLD schema used.
+           Iterating today's INTAKE_ITEMS would silently drop any count whose
+           key had since been renamed — a migration must speak the source
+           version's vocabulary, not the current one. */
+        var V3_KEYS = ["coffeeBlack", "coffeeMilk", "alcohol", "meat"];
         var log = Array.isArray(parsed.intakeLog) ? parsed.intakeLog : [];
         (Array.isArray(parsed.intake) ? parsed.intake : []).forEach(function (row) {
           if (!row || !row.date) return;
           var noon = new Date(row.date + "T12:00:00").getTime();
-          INTAKE_ITEMS.forEach(function (it) {
-            var c = Math.max(0, Math.round(Number(row[it.key]) || 0));
+          V3_KEYS.forEach(function (oldKey) {
+            var c = Math.max(0, Math.round(Number(row[oldKey]) || 0));
             for (var i = 0; i < c; i++) {
-              log.push({ at: noon + i * 60000, key: it.key, approx: true });
+              log.push({ at: noon + i * 60000, key: oldKey, approx: true });
             }
           });
         });
@@ -628,36 +635,121 @@ var ALCOHOL_TIMELINE = [
   }
 ];
 
-/* Meat is measured in days, not hours: the short-term effects are one meal
- * long, and the thing that actually matters over a week is whether protein is
- * adequate in a deficit. The app CANNOT see that — it tracks meat, not
- * protein — so the multi-day copy says so instead of implying a shortfall. */
+/* Meat is measured in days, because what is being tracked is a digestive
+ * burden and a streak, not a nutrient. Slower gastric emptying is measurable
+ * and stated as such. "Clean of meat" is stated as a fact about what you ate,
+ * NOT as detoxification — meat does not accumulate and the body does not
+ * clear it over days. The traditional view of meat as heavy lives in the
+ * Ayurvedic section, clearly labelled, and not mixed in here. */
 var MEAT_TIMELINE = [
   {
-    from: 0, to: 4, label: "עיכול",
-    now: "חלבון מתעכל לאט יחסית, והאפקט התרמי שלו פעיל עכשיו: חלק ניכר מהקלוריות נשרפות על העיכול עצמו.",
-    feel: "שובע ממושך יותר מאשר אחרי ארוחה עתירת פחמימות.",
+    from: 0, to: 4, label: "עדיין בעיכול",
+    now: "הארוחה עדיין בקיבה. בשר מתרוקן מהקיבה לאט יותר מפחמימות, והאפקט התרמי פעיל — חלק ניכר מהקלוריות נשרפות על העיכול עצמו.",
+    feel: "שובע ארוך, לפעמים כובד. אחרי ארוחה גדולה גם נמנום.",
+    helps: "לא לשכב מיד. מים."
+  },
+  {
+    from: 4, to: 24, label: "העיכול הסתיים",
+    now: "הקיבה התרוקנה והספיגה במעי נמשכת. חומצות האמינו נכנסו למחזור ומשמשות לתחזוקת רקמות.",
+    feel: "בדרך כלל שום דבר מיוחד.",
     helps: "—"
   },
   {
-    from: 4, to: 24, label: "אחרי הארוחה",
-    now: "ההשפעה הישירה נגמרה. חומצות האמינו נכנסו למחזור ומשמשות לתחזוקת רקמות.",
-    feel: "שום דבר מיוחד.",
-    helps: "—"
+    from: 24, to: 72, label: "יום-יומיים נקי",
+    now: "מערכת העיכול לא עסוקה בארוחות כבדות. זו עובדה על מה שאכלת, לא תהליך שקורה בגוף — הגוף לא 'מתנקה' מבשר.",
+    feel: "יש שמדווחים על קלילות ועיכול נוח יותר. זה דיווח סובייקטיבי, לא ממצא מדיד.",
+    helps: "אם המטרה היא פחות כובד — זה בדיוק מה שהמונה הזה מראה."
   },
   {
-    from: 24, to: 72, label: "יום-שלושה",
-    now: "אין כאן שלב פיזיולוגי — הגוף לא סופר ימים מאז בשר. מה שכן חשוב בגירעון קלורי הוא סך החלבון היומי, לא המקור שלו.",
-    feel: "שום דבר שנובע מזה.",
-    helps: "האפליקציה עוקבת אחרי בשר בלבד ולא רואה ביצים, דגים, מוצרי חלב או קטניות. אם החלבון מגיע משם — המספר הזה לא אומר כלום."
-  },
-  {
-    from: 72, to: Infinity, label: "מעל שלושה ימים",
-    now: "בגירעון קלורי, חלבון מספיק הוא מה ששומר על מסת שריר — כלומר מה שגורם לירידה להיות בשומן ולא בשריר.",
-    feel: "אין תסמין ישיר. אם הירידה במשקל ממשיכה אבל המותן עומדת, זה סימן ששווה לבדוק.",
-    helps: "האפליקציה לא יודעת כמה חלבון אכלת, רק כמה בשר. אם אתה מקבל חלבון ממקורות אחרים, אין כאן שום בעיה."
+    from: 72, to: Infinity, label: "רצף ארוך נקי",
+    now: "רצף ארוך בלי בשר. שוב — זו עובדה על ההרגל, לא על ניקוי הגוף.",
+    feel: "משתנה מאוד בין אנשים.",
+    helps: "בגירעון קלורי כדאי לוודא שיש חלבון מאיפשהו — דגים, ביצים, חלב או קטניות — כי חלבון מספיק הוא מה ששומר על מסת שריר. האפליקציה לא רואה את אלה ולא סופרת אותם."
   }
 ];
+
+/* ============================================================ *
+ *  Ayurvedic lens — a SEPARATE frame, deliberately not blended
+ *
+ *  Everything else in this file states replicated physiology. This section
+ *  states what a traditional system says. The two are kept apart on purpose:
+ *  caffeine's half-life is a measurement, dosha balance is a framework, and
+ *  presenting them in one voice would misrepresent both.
+ *
+ *  Descriptive only — qualities of the current state in the tradition's own
+ *  terms. No herbs, no remedies, no treatment claims. The app describes;
+ *  it does not prescribe, and it says so in the UI.
+ *
+ *  Constitution (prakriti) is NOT asked. A real practitioner determines it by
+ *  examination, and a self-selected dosha would make the output look
+ *  personalised while being no such thing. Everything below describes the
+ *  STATE, which holds regardless of type.
+ * ============================================================ */
+var AYUR_NOTE = "מערכת מסורתית בת אלפי שנים, לא רפואה מבוססת ראיות במובן שבו שאר האפליקציה מדברת. מוצג כאן כזווית נוספת, לא כהמלצה וגם לא כאבחנה.";
+
+var AYUR_FASTING = [
+  {
+    from: 0, to: 4, label: "אחרי אכילה",
+    qualities: "כבד, יציב",
+    text: "בלשון המסורת, אַגְנִי — אש העיכול — עסוקה עכשיו בעבודה. זה הזמן שבו הגוף נחשב 'מלא'.",
+    dosha: "קַפְּהָה עולה: כבדות, איטיות, נטייה לנמנום."
+  },
+  {
+    from: 4, to: 12, label: "העיכול נגמר",
+    qualities: "קל יותר, מתחמם",
+    text: "המסורת רואה בפרק הזה את הזמן שבו האגני מתפנה. צום קצר נחשב בה למחזק את אש העיכול ולא למחליש אותה.",
+    dosha: "פִּיטָה עולה בהדרגה: חדות, חום, לפעמים קוצר רוח."
+  },
+  {
+    from: 12, to: 24, label: "צום נמשך",
+    qualities: "קל, יבש, קר",
+    text: "כאן, לפי המסורת, מתחילות לעלות התכונות של וָאטָה — קלילות ויובש. זה מוסבר כשלב שבו הגוף 'מתנקה' אבל גם מתייבש.",
+    dosha: "וָאטָה עולה: קלילות, יובש, לפעמים חוסר שקט או קור בגפיים."
+  },
+  {
+    from: 24, to: Infinity, label: "צום ארוך",
+    qualities: "יבש וקר מאוד",
+    text: "המסורת מתייחסת לצום ממושך כאל דבר שדורש ליווי, ולא כאל תרגול יומיומי. עודף ואטה נחשב בה למה שגורם לחוסר יציבות, לא לניקיון.",
+    dosha: "ואטה גבוהה מאוד. המסורת עצמה ממליצה כאן על חום, שמן ומנוחה — לא על עוד צום."
+  }
+];
+
+var AYUR_ITEMS = {
+  coffee: {
+    label: "קפה",
+    qualities: "חם, יבש, חד",
+    text: "נחשב במסורת לחומר מחמם ומייבש. מוגדר כמעלה ואטה ופיטה, ומרגיע קפהה — מה שמסביר למה הוא 'מעיר' אבל גם מייבש ומקצר סבלנות.",
+    withFasting: "קפה על בטן ריקה מצרף יובש ליובש. המסורת הייתה קוראת לזה הגברה כפולה של ואטה."
+  },
+  alcohol: {
+    label: "אלכוהול",
+    qualities: "חם, חד, חודר",
+    text: "מתואר כמעלה פיטה בעיקר — חום, חדות, עצבנות — ובכמות גדולה גם מפר את שלושת הדושות יחד.",
+    withFasting: "המסורת מתייחסת לאלכוהול בצום כאל שילוב שמכביד על העיכול דווקא כשהוא הכי חלש."
+  },
+  meat: {
+    label: "בשר",
+    qualities: "גוּרוּ — כבד, איטי, מקרקע",
+    text: "המסורת מסווגת בשר כמזון כבד (גוּרוּ): דורש אגני חזקה, מתעכל לאט, ומקרקע. כשהעיכול חלש, מזון כבד נחשב בה למה שמייצר אָמָה — שאריות לא מעוכלות.",
+    withFasting: "אחרי צום, המסורת ממליצה להתחיל בקל וחם ולא בכבד. זה מסתדר עם עצת שבירת הצום ההדרגתית שבחלק הפיזיולוגי, משתי סיבות שונות."
+  }
+};
+
+function ayurFastingStage(hours) {
+  return timelineStage(AYUR_FASTING, isFinite(hours) ? Math.max(0, hours) : 0);
+}
+
+/* Which tracked substances are currently relevant enough to describe. */
+function ayurActiveItems(log, nowMs) {
+  var out = [];
+  var caf = caffeineSince(log, nowMs);
+  if (caf && caf.hours < 24) out.push(Object.assign({ id: "coffee" }, AYUR_ITEMS.coffee));
+  var alc = alcoholSince(log, nowMs);
+  if (alc && alc.hours < 24) out.push(Object.assign({ id: "alcohol" }, AYUR_ITEMS.alcohol));
+  var mt = meatSince(log, nowMs);
+  if (mt && mt.hours < 24) out.push(Object.assign({ id: "meat" }, AYUR_ITEMS.meat));
+  return out;
+}
 
 /* Common non-obvious confusions worth surfacing rather than letting the user
  * misattribute. Keyed to the state the app can actually observe. */
@@ -1100,6 +1192,8 @@ window.FT = {
   CAFFEINE_KEYS: CAFFEINE_KEYS, ALCOHOL_KEYS: ALCOHOL_KEYS,
   hoursSinceLast: hoursSinceLast, timelineStage: timelineStage,
   headacheAmbiguous: headacheAmbiguous, HEADACHE_NOTE: HEADACHE_NOTE,
+  AYUR_NOTE: AYUR_NOTE, AYUR_FASTING: AYUR_FASTING, AYUR_ITEMS: AYUR_ITEMS,
+  ayurFastingStage: ayurFastingStage, ayurActiveItems: ayurActiveItems,
   CAFFEINE_TIMELINE: CAFFEINE_TIMELINE, ALCOHOL_TIMELINE: ALCOHOL_TIMELINE,
   CAFFEINE_HALF_LIFE_H: CAFFEINE_HALF_LIFE_H, CAFFEINE_SLEEP_MG: CAFFEINE_SLEEP_MG,
   intakeOn: intakeOn, intakeTotals: intakeTotals,

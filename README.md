@@ -27,9 +27,20 @@ device and leaves it only through a JSON export you trigger yourself.
   When a headache has two plausible causes the app can see at once — falling
   caffeine and sodium loss from fasting — it names both rather than guessing.
 
-  A summary line covers all three at once — "coffee 5 hours ago, meat 3 days,
-  alcohol a week" — with clean-day counts. To log a past day, set the date at
-  the top of the intake card; the card is visibly marked while it is not today. Note the app tracks *meat*, not protein: it can't see eggs, fish
+  A summary line covers all three at once — "coffee 5 hours ago, meat 6 days,
+  alcohol a week" — with clean-day counts. Meat is tracked as a digestive
+  burden rather than a nutrient: slower gastric emptying is stated because it
+  is measurable, "clean of meat" is stated as a fact about what you ate, and
+  detox claims are refused outright.
+
+  To log a past day, set the date at the top of the intake card. The card is
+  visibly marked while it is not today, and past-day changes are staged until
+  you press save — nothing on screen would otherwise prove the write happened.
+- **An Ayurvedic lens**, in its own clearly-labelled card. Doshas, agni, and
+  the tradition's view of fasting, coffee, alcohol and meat. Kept separate from
+  the physiology on purpose: caffeine's half-life is a measurement, dosha
+  balance is a framework, and one voice for both would misrepresent each. It
+  describes state rather than prescribing, and does not ask your constitution. Note the app tracks *meat*, not protein: it can't see eggs, fish
   or dairy, and says so instead of implying a shortfall it can't observe.
 - **Pace** — required vs. actual kg/week and a projection to the next goal.
 
@@ -78,4 +89,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.5.1.md` | Human pass |
+| `tests/TEST-PLAN-v2.6.0.md` | Human pass |

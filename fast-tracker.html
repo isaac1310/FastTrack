@@ -223,6 +223,18 @@
               background:rgba(224,183,92,.10); border:1px solid rgba(224,183,92,.35);
               border-radius:var(--r-tile); padding:8px 12px; font-size:12.5px; color:var(--gold);}
 
+  /* ---- Ayurvedic lens: visually distinct so it is never mistaken for the
+         evidence-based content next to it ---- */
+  .card.ayur{border:1px solid var(--border2); background:linear-gradient(180deg,rgba(127,182,224,.05),transparent 55%);}
+  .card.ayur .blk .k{color:var(--sky);}
+  .ayurNote{font-size:11.5px; color:var(--muted); line-height:1.6; padding:8px 10px;
+            background:var(--surface2); border-radius:var(--r-tile); border:1px solid var(--border2);}
+
+  /* unsaved past-day edits */
+  .stepper.dirty{border-color:var(--gold); box-shadow:0 0 0 2px rgba(224,183,92,.18);}
+  .btn:disabled{opacity:.45; cursor:default;}
+  .btn:disabled:hover{background:var(--surface2);}
+
   /* ---- lists ---- */
   .rows{display:flex; flex-direction:column; gap:6px;}
   .row{display:flex; align-items:center; justify-content:space-between; gap:10px;

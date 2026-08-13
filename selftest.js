@@ -268,6 +268,14 @@
       if (FT.breaksFast("meat") !== true) return "meat marked as fasting-safe";
       return true;
     });
+    check("fixtures only use real keys — a typo must not pass vacuously", function () {
+      // logAt() silently drops unknown keys, so a stale key in a fixture turns
+      // its check into a tautology. This catches that.
+      var real = FT.INTAKE_ITEMS.map(function (i) { return i.key; });
+      var probe = logAt([["meat", 1], ["coffeeBlack", 1], ["alcohol", 1], ["coffeeMilk", 1]]);
+      if (probe.length !== 4) return "a fixture key was dropped: only " + probe.length + " of 4 stored";
+      return real.length === 4 ? true : "item list changed; fixtures need review";
+    });
     check("an unknown item is rejected, not stored", function () {
       var r = FT.addIntakeEvent([], "kombucha", T0);
       return r.added === false && r.log.length === 0 ? true : "unknown key was accepted";
@@ -479,8 +487,8 @@
     check("includes backdated entries — they have a known day", function () {
       // excluding them made a quick-backfilled meat entry vanish from the card
       var r = FT.intakeSummary(SCENARIO, T0);
-      var meat = r.filter(function (g) { return g.id === "meat"; })[0];
-      return meat.ever === true ? true : "backdated meat was treated as never logged";
+      var pro = r.filter(function (g) { return g.id === "meat"; })[0];
+      return pro.ever === true ? true : "backdated meat was treated as never logged";
     });
     check("flags rows whose last entry has no exact time", function () {
       var r = FT.intakeSummary(SCENARIO, T0);
@@ -497,7 +505,7 @@
 
     group("meat timeline");
     check("stages land correctly by hours", function () {
-      var cases = [[1, "עיכול"], [10, "אחרי"], [40, "יום-שלושה"], [100, "מעל שלושה"]];
+      var cases = [[1, "בעיכול"], [10, "הסתיים"], [40, "נקי"], [100, "נקי"]];
       for (var i = 0; i < cases.length; i++) {
         var r = FT.meatSince([{ at: T0 - cases[i][0] * 3600000, key: "meat", approx: false }], T0);
         if (r.stage.label.indexOf(cases[i][1]) === -1) {
@@ -506,13 +514,30 @@
       }
       return true;
     });
-    check("multi-day copy admits the app cannot see total protein", function () {
-      // it tracks meat, not protein — implying a shortfall it cannot observe
-      // would be inventing a problem
+    check("meat is described by its digestion burden, which is measurable", function () {
+      var it = FT.intakeItem("meat");
+      if (!it) return "meat item missing";
+      return /לאט|התרוקנות|איטי/.test(it.now)
+        ? true : "copy lost the slower-gastric-emptying point";
+    });
+    check("meat copy refuses the detox claim outright", function () {
+      // slower digestion is measurable; "cleansing" and toxin accumulation
+      // are not, and a days-clean counter must not imply them
+      var it = FT.intakeItem("meat");
+      var blob = it.caution + " " + it.now + " " + it.effect;
+      if (!/אינן מבוססות|לא מבטיחה/.test(blob)) return "no disclaimer against cleansing claims";
+      return /רעלים מצטברים|מנקה את הגוף|ניקוי רעלים/.test(blob)
+        ? "copy asserts detoxification" : true;
+    });
+    check("the long-streak stage still flags the protein question honestly", function () {
+      // tracking meat as a burden is fine, but a long meat-free streak in a
+      // calorie deficit is exactly when lean mass is at risk, and the app
+      // cannot see other protein sources
       var r = FT.meatSince([{ at: T0 - 100 * 3600000, key: "meat", approx: false }], T0);
-      var blob = r.stage.now + " " + r.stage.helps;
-      return /ביצים|דגים|מקורות אחרים|לא יודעת/.test(blob)
-        ? true : "meat copy implies a protein deficit the app cannot see";
+      var blob = r.stage.helps;
+      if (!/חלבון/.test(blob)) return "long streak says nothing about protein";
+      return /לא רואה|לא סופרת/.test(blob)
+        ? true : "does not admit it cannot see other protein sources";
     });
     check("includes backdated entries, unlike the hour-scale timelines", function () {
       var l = [{ at: T0 - 48 * 3600000, key: "meat", approx: true }];
@@ -639,10 +664,14 @@
       var a = FT.intakeItem("alcohol");
       return /חמצון השומן|שריפת/.test(a.effect) ? true : "alcohol effect copy lost its substance";
     });
-    check("meat copy carries the contested-evidence caveat rather than moralising", function () {
-      var m = FT.intakeItem("meat");
-      return m.caution && /מחלוקת|מעובד/.test(m.caution)
-        ? true : "meat caveat missing — the health claims must not be stated flatly";
+    check("the days-clean stages state a fact, not a cleansing process", function () {
+      var r = FT.meatSince([{ at: T0 - 40 * 3600000, key: "meat", approx: true }], T0);
+      var blob = r.stage.now + " " + r.stage.feel + " " + r.stage.helps;
+      if (/מתנקה|ניקוי/.test(blob) && !/לא 'מתנקה'|לא מתנקה/.test(blob)) {
+        return "a clean-streak stage implies detoxification";
+      }
+      return /עובדה|סובייקטיבי/.test(blob)
+        ? true : "stage does not distinguish fact from felt experience";
     });
 
     /* ================= composition ================= */
@@ -875,6 +904,89 @@
     });
 
     /* ================= storage ================= */
+    group("meat migration");
+    check("v3 day counts of meat survive the conversion to events", function () {
+      // the v3 converter read today's item keys; when meat was renamed it
+      // found no `protein` field and silently dropped every meat count
+      var v3 = JSON.stringify({
+        schemaVersion: 3, weights: [], goals: [], measures: [], fastHistory: [],
+        intake: [{ date: "2026-08-05", coffeeBlack: 1, coffeeMilk: 0, alcohol: 2, meat: 2 }]
+      });
+      var r = FT.migrate(v3, null, null);
+      if (!r.doc) return "v3 refused: " + r.error;
+      var c = FT.intakeOn(r.doc.intakeLog, "2026-08-05");
+      if (c.meat !== 2) return "meat counts lost: meat=" + c.meat;
+      if (c.alcohol !== 2 || c.coffeeBlack !== 1) return "other counts changed: " + JSON.stringify(c);
+      return true;
+    });
+    check("a v2 document still walks the whole chain to the current version", function () {
+      var v2 = JSON.stringify({
+        schemaVersion: 2, weights: [{ date: "2026-08-01", kg: 76 }],
+        goals: [], measures: [], fastHistory: []
+      });
+      var r = FT.migrate(v2, null, null);
+      if (!r.doc) return "v2 refused: " + r.error;
+      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "stopped at v" + r.doc.schemaVersion;
+      return eq(r.doc.weights.length, 1, "weights");
+    });
+    check("the v3 converter lists source-version keys explicitly", function () {
+      // iterating the CURRENT item list would silently drop any count whose
+      // key was later renamed — this is the shape that bug takes
+      var v3 = JSON.stringify({
+        schemaVersion: 3, weights: [], goals: [], measures: [], fastHistory: [],
+        intake: [{ date: "2026-08-05", coffeeBlack: 1, coffeeMilk: 1, alcohol: 1, meat: 1 }]
+      });
+      var c = FT.intakeOn(FT.migrate(v3, null, null).doc.intakeLog, "2026-08-05");
+      var total = c.coffeeBlack + c.coffeeMilk + c.alcohol + c.meat;
+      return eq(total, 4, "total events from a 4-key v3 row");
+    });
+
+    group("ayurvedic lens");
+    check("is kept separate from the physiology, and says what it is", function () {
+      // blending a traditional framework into measured physiology would
+      // misrepresent both
+      var t = FT.AYUR_NOTE;
+      if (!/מסורת|מסורתית/.test(t)) return "does not identify itself as traditional";
+      if (!/לא רפואה מבוססת ראיות|לא כהמלצה/.test(t)) return "does not disclaim evidence standing";
+      return true;
+    });
+    check("every fasting stage has qualities, text and a dosha line", function () {
+      for (var i = 0; i < FT.AYUR_FASTING.length; i++) {
+        var st = FT.AYUR_FASTING[i];
+        var keys = ["qualities", "text", "dosha"];
+        for (var k = 0; k < keys.length; k++) {
+          if (!st[keys[k]] || !String(st[keys[k]]).trim()) {
+            return "stage '" + st.label + "' has empty " + keys[k];
+          }
+        }
+      }
+      return true;
+    });
+    check("stages cover 0 to Infinity with no gaps", function () {
+      var tl = FT.AYUR_FASTING;
+      if (tl[0].from !== 0) return "does not start at 0";
+      for (var i = 1; i < tl.length; i++) {
+        if (tl[i].from !== tl[i - 1].to) return "gap at " + tl[i - 1].to;
+      }
+      return isFinite(tl[tl.length - 1].to) ? "does not end at Infinity" : true;
+    });
+    check("only describes substances taken in the last day", function () {
+      var old = [{ at: T0 - 40 * 3600000, key: "alcohol", approx: false }];
+      var fresh = [{ at: T0 - 2 * 3600000, key: "alcohol", approx: false }];
+      if (FT.ayurActiveItems(old, T0).length !== 0) return "a 40h-old drink was still described";
+      return FT.ayurActiveItems(fresh, T0).length === 1 ? true : "a fresh drink was not described";
+    });
+    check("makes no treatment or remedy claim", function () {
+      var blob = JSON.stringify(FT.AYUR_FASTING) + JSON.stringify(FT.AYUR_ITEMS);
+      return /צמח מרפא|תוסף|לרפא|מרפא את|תרופה/.test(blob)
+        ? "the lens strays into treatment claims" : true;
+    });
+    check("does not ask for or assert a constitution", function () {
+      var d = FT.emptyDoc();
+      return ("dosha" in d.profile) || ("prakriti" in d.profile)
+        ? "the app stores a self-selected constitution" : true;
+    });
+
     group("banner dismissal");
     check("dismissals live in the document, so they survive a reload", function () {
       // it was transient view state, so the "data is only on this device"
