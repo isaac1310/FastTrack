@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.3.0
+# FastTrack — human test plan v2.4.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.3.0`. If it doesn't, you're on a cached page and every result below is
+read `v2.4.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `105 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `125 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.3.0`
+Version footer checked: ☐ `v2.4.0`
 
 ---
 
-## 10 · Intake ⚠️ *new in v2.3.0*
+## 10 · Intake ⚠️ *new in v2.4.0*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -171,7 +171,7 @@ Version footer checked: ☐ `v2.3.0`
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
 
-## 12 · Live body status ⚠️ *new in v2.3.0*
+## 12 · Live body status ⚠️ *new in v2.4.0*
 
 36. With no coffee or alcohol logged today and no fast running, look for the
     "מה קורה עכשיו בגוף" card.
@@ -197,3 +197,31 @@ Version footer checked: ☐ `v2.3.0`
 42. Switch the צריכה date to a past day and log a coffee there.
     **Expect:** the daily and weekly counts include it, but the live caffeine
     figure does **not** move. A dose with no real time can't be circulating now.
+
+## 13 · Since-last-dose ⚠️ *new in v2.4.0*
+
+43. Log a coffee, then look at "מה קורה עכשיו בגוף".
+    **Expect:** a heading like `קפאין · לפני 3 דק׳ · ספיגה`, with what's
+    happening, what it feels like, and what helps.
+44. Watch the "לפני X" figure for a minute.
+    **Expect:** it counts up on its own, no reload.
+45. ⚠️ **The case this version exists for.** Using a past-dated entry or by
+    waiting, get to roughly 8 hours since your last coffee.
+    **Expect:** the stage reads `ירידה`, and "מה זה מרגיש" describes the crash
+    — sudden fatigue, sometimes a mild headache. Not withdrawal; that's later.
+46. At roughly 14 hours since the last coffee.
+    **Expect:** the stage reads `חלון תחילת גמילה`, headache is named as the
+    most common symptom, and the text says explicitly that this applies to
+    regular coffee drinkers — not to someone who has one occasionally.
+47. With a fast running past 10 hours AND more than 5 hours since coffee.
+    **Expect:** ⚠️ an "אם יש כאב ראש" block naming **both** possible causes and
+    saying the app can't tell which. If it confidently blames one, that's a
+    failure — this is the whole point of the block.
+48. Break the fast (or log with a short fast) and re-check.
+    **Expect:** the two-causes block disappears. It only appears when both are
+    genuinely plausible.
+49. Log a drink, then check the card 9 hours later.
+    **Expect:** stage `השפעת לילה והתאוששות`, explaining that hangover symptoms
+    peak *after* the alcohol has already cleared.
+50. With no coffee or alcohol in the last 3 days and no fast running.
+    **Expect:** the card is absent entirely. Nothing to say.

@@ -355,6 +355,129 @@
       return c.clearAtMs > T0 ? true : "threshold time is in the past";
     });
 
+    group("since last dose");
+    check("no dose ever returns null, not zero hours", function () {
+      return isNull(FT.caffeineSince([], T0), "caffeineSince") === true &&
+             isNull(FT.alcoholSince([], T0), "alcoholSince") === true
+        ? true : "expected null for both";
+    });
+    check("backdated doses do not count as a last dose", function () {
+      // an imported day-count has no real time; "8 hours since" would be a lie
+      var l = FT.addIntakeEvent([], "coffeeBlack", T0 - 8 * 3600000, true).log;
+      return isNull(FT.caffeineSince(l, T0), "caffeineSince");
+    });
+    check("uses the MOST RECENT dose, not the first", function () {
+      var l = logAt([["coffeeBlack", 12], ["coffeeBlack", 2]]);
+      return near(FT.caffeineSince(l, T0).hours, 2, 0.01, "hours since");
+    });
+    check("coffee with milk counts as a caffeine dose", function () {
+      return near(FT.caffeineSince(logAt([["coffeeMilk", 3]]), T0).hours, 3, 0.01, "hours");
+    });
+    check("meat is not a caffeine dose", function () {
+      return isNull(FT.caffeineSince(logAt([["meat", 1]]), T0), "caffeineSince");
+    });
+    check("alcohol and caffeine do not contaminate each other", function () {
+      var l = logAt([["alcohol", 2], ["coffeeBlack", 9]]);
+      if (Math.abs(FT.caffeineSince(l, T0).hours - 9) > 0.01) return "caffeine picked up the drink";
+      if (Math.abs(FT.alcoholSince(l, T0).hours - 2) > 0.01) return "alcohol picked up the coffee";
+      return true;
+    });
+
+    group("caffeine timeline");
+    var STAGES = [[0.5, "ספיגה"], [3, "שיא"], [8, "ירידה"], [14, "גמילה"], [30, "גמילה"], [80, "אחרי"]];
+    check("every stage boundary lands in the right stage", function () {
+      for (var i = 0; i < STAGES.length; i++) {
+        var r = FT.caffeineSince(logAt([["coffeeBlack", STAGES[i][0]]]), T0);
+        if (r.stage.label.indexOf(STAGES[i][1]) === -1) {
+          return STAGES[i][0] + "h landed in '" + r.stage.label + "'";
+        }
+      }
+      return true;
+    });
+    check("8 hours reports the crash, not withdrawal", function () {
+      // the case that prompted this: 8h since coffee is the descent, and
+      // withdrawal proper starts later
+      var r = FT.caffeineSince(logAt([["coffeeBlack", 8]]), T0);
+      return /נפילה/.test(r.stage.feel) ? true : "8h stage lost its crash description";
+    });
+    check("the withdrawal window is 12-24h, and names headache", function () {
+      var r = FT.caffeineSince(logAt([["coffeeBlack", 14]]), T0);
+      if (!/גמילה/.test(r.stage.label)) return "14h is not the withdrawal window";
+      return /כאב ראש/.test(r.stage.feel) ? true : "withdrawal copy does not mention headache";
+    });
+    check("withdrawal copy says it applies to regular drinkers only", function () {
+      var r = FT.caffeineSince(logAt([["coffeeBlack", 14]]), T0);
+      return /מדי פעם|קבוע/.test(r.stage.feel)
+        ? true : "withdrawal is stated as universal — it is not";
+    });
+    check("countdown to the next stage is positive and shrinks", function () {
+      var a = FT.caffeineSince(logAt([["coffeeBlack", 6]]), T0);
+      var b = FT.caffeineSince(logAt([["coffeeBlack", 9]]), T0);
+      if (a.hoursToNext <= 0 || b.hoursToNext <= 0) return "non-positive countdown";
+      return b.hoursToNext < a.hoursToNext ? true : "countdown did not shrink";
+    });
+    check("the final stage has no next", function () {
+      return isNull(FT.caffeineSince(logAt([["coffeeBlack", 200]]), T0).hoursToNext, "hoursToNext");
+    });
+    check("every timeline stage has now/feel/helps filled in", function () {
+      var lists = [["caffeine", FT.CAFFEINE_TIMELINE], ["alcohol", FT.ALCOHOL_TIMELINE]];
+      for (var i = 0; i < lists.length; i++) {
+        var tl = lists[i][1];
+        for (var j = 0; j < tl.length; j++) {
+          var keys = ["now", "feel", "helps"];
+          for (var k = 0; k < keys.length; k++) {
+            if (!tl[j][keys[k]] || !String(tl[j][keys[k]]).trim()) {
+              return lists[i][0] + " stage '" + tl[j].label + "' has empty " + keys[k];
+            }
+          }
+        }
+      }
+      return true;
+    });
+    check("timelines have no gaps or overlaps", function () {
+      var lists = [["caffeine", FT.CAFFEINE_TIMELINE], ["alcohol", FT.ALCOHOL_TIMELINE]];
+      for (var i = 0; i < lists.length; i++) {
+        var tl = lists[i][1];
+        if (tl[0].from !== 0) return lists[i][0] + " does not start at 0";
+        for (var j = 1; j < tl.length; j++) {
+          if (tl[j].from !== tl[j - 1].to) {
+            return lists[i][0] + " gap/overlap at " + tl[j - 1].to + " -> " + tl[j].from;
+          }
+        }
+        if (isFinite(tl[tl.length - 1].to)) return lists[i][0] + " does not end at Infinity";
+      }
+      return true;
+    });
+
+    group("alcohol timeline");
+    check("the hangover window says symptoms peak after it has cleared", function () {
+      var r = FT.alcoholSince(logAt([["alcohol", 9]]), T0);
+      return /לאפס|פונה/.test(r.stage.feel + r.stage.now)
+        ? true : "recovery stage lost the point that BAC is already zero";
+    });
+
+    group("headache ambiguity");
+    check("fires when caffeine is falling AND the fast is deep enough", function () {
+      // both causes visible at once: the app must not blame one
+      return eq(FT.headacheAmbiguous(logAt([["coffeeBlack", 8]]), 14, T0), true);
+    });
+    check("silent when the fast is too short for sodium loss", function () {
+      return eq(FT.headacheAmbiguous(logAt([["coffeeBlack", 8]]), 2, T0), false);
+    });
+    check("silent when caffeine is still high", function () {
+      return eq(FT.headacheAmbiguous(logAt([["coffeeBlack", 1]]), 14, T0), false);
+    });
+    check("silent when not fasting at all", function () {
+      return eq(FT.headacheAmbiguous(logAt([["coffeeBlack", 8]]), null, T0), false);
+    });
+    check("the note names BOTH causes and does not pick one", function () {
+      var t = FT.HEADACHE_NOTE;
+      if (!/קפאין/.test(t)) return "does not mention caffeine";
+      if (!/נתרן|מלח/.test(t)) return "does not mention sodium";
+      return /לא יכולה לדעת|יכול להיות/.test(t)
+        ? true : "the note asserts a cause instead of naming both";
+    });
+
     group("alcoholNow");
     check("no drinks means zero", function () {
       var a = FT.alcoholNow([], T0);

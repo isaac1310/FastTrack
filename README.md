@@ -17,10 +17,15 @@ device and leaves it only through a JSON export you trigger yourself.
 - **Intake** — coffee, alcohol and meat, one tap each. Shown week-by-week
   alongside that week's weight change, plus a reference on what each does to
   the body and whether it breaks a fast.
-- **Live body status** — what is actually circulating right now: estimated
-  caffeine still active and when it stops mattering for sleep, and alcohol
-  still to clear with the fat-oxidation window that implies. Timestamps are
-  recorded automatically when you tap, so this costs no extra input.
+- **Live body status** — how long since your last coffee or drink, what stage
+  that puts you in, and what people typically feel there. "8 hours since
+  coffee" is the crash; 12–24 hours is the withdrawal window where headache is
+  the most common symptom. Alongside it, how much is still circulating and
+  when it clears. Timestamps are recorded automatically when you tap, so this
+  costs no extra input.
+
+  When a headache has two plausible causes the app can see at once — falling
+  caffeine and sodium loss from fasting — it names both rather than guessing.
 - **Pace** — required vs. actual kg/week and a projection to the next goal.
 
 ## What it deliberately does not do
@@ -68,4 +73,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.3.0.md` | Human pass |
+| `tests/TEST-PLAN-v2.4.0.md` | Human pass |
