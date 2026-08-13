@@ -261,9 +261,8 @@
       return l;
     }
 
-    check("black coffee does not break a fast; milk/sugar, alcohol and meat do", function () {
+    check("black coffee does not break a fast; alcohol and meat do", function () {
       if (FT.breaksFast("coffeeBlack") !== false) return "black coffee marked as breaking a fast";
-      if (FT.breaksFast("coffeeMilk") !== true) return "coffee with milk marked as fasting-safe";
       if (FT.breaksFast("alcohol") !== true) return "alcohol marked as fasting-safe";
       if (FT.breaksFast("meat") !== true) return "meat marked as fasting-safe";
       return true;
@@ -272,9 +271,9 @@
       // logAt() silently drops unknown keys, so a stale key in a fixture turns
       // its check into a tautology. This catches that.
       var real = FT.INTAKE_ITEMS.map(function (i) { return i.key; });
-      var probe = logAt([["meat", 1], ["coffeeBlack", 1], ["alcohol", 1], ["coffeeMilk", 1]]);
-      if (probe.length !== 4) return "a fixture key was dropped: only " + probe.length + " of 4 stored";
-      return real.length === 4 ? true : "item list changed; fixtures need review";
+      var probe = logAt([["meat", 1], ["coffeeBlack", 1], ["alcohol", 1]]);
+      if (probe.length !== 3) return "a fixture key was dropped: only " + probe.length + " of 3 stored";
+      return real.length === 3 ? true : "item list changed; fixtures need review";
     });
     check("an unknown item is rejected, not stored", function () {
       var r = FT.addIntakeEvent([], "kombucha", T0);
@@ -341,9 +340,15 @@
       // 100*0.5^(1/5) + 100*0.5^(6/5) = 87.1 + 43.5
       return near(FT.caffeineNow(l, T0).mg, 131, 3, "summed mg");
     });
-    check("coffee with milk still contributes caffeine", function () {
-      var l = logAt([["coffeeMilk", 1]]);
-      return FT.caffeineNow(l, T0).mg > 50 ? true : "milk coffee contributed no caffeine";
+    check("v4 coffeeMilk events are relabelled coffeeBlack, keeping their caffeine", function () {
+      var v4 = JSON.stringify({
+        schemaVersion: 4, weights: [], goals: [], measures: [], fastHistory: [],
+        intakeLog: [{ at: T0 - 3600000, key: "coffeeMilk", approx: false }]
+      });
+      var r = FT.migrate(v4, null, null);
+      if (!r.doc) return "v4 refused: " + r.error;
+      if (r.doc.intakeLog[0].key !== "coffeeBlack") return "coffeeMilk not relabelled";
+      return FT.caffeineNow(r.doc.intakeLog, T0).mg > 50 ? true : "caffeine lost in relabel";
     });
     check("meat contributes no caffeine", function () {
       return eq(FT.caffeineNow(logAt([["meat", 1]]), T0).mg, 0, "mg");
@@ -378,9 +383,7 @@
       var l = logAt([["coffeeBlack", 12], ["coffeeBlack", 2]]);
       return near(FT.caffeineSince(l, T0).hours, 2, 0.01, "hours since");
     });
-    check("coffee with milk counts as a caffeine dose", function () {
-      return near(FT.caffeineSince(logAt([["coffeeMilk", 3]]), T0).hours, 3, 0.01, "hours");
-    });
+
     check("meat is not a caffeine dose", function () {
       return isNull(FT.caffeineSince(logAt([["meat", 1]]), T0), "caffeineSince");
     });
@@ -497,10 +500,28 @@
       if (by.caffeine.approxOnly !== false) return "exact coffee wrongly flagged approx";
       return true;
     });
-    check("a week-old drink lands in the baseline stage, not the hangover window", function () {
+    check("a week-old drink lands in the week-clean stage, not the hangover window", function () {
       var r = FT.intakeSummary(SCENARIO, T0);
       var alc = r.filter(function (g) { return g.id === "alcohol"; })[0];
-      return /קו הבסיס/.test(alc.stage.label) ? true : "got stage '" + alc.stage.label + "'";
+      return /שבוע/.test(alc.stage.label) ? true : "got stage '" + alc.stage.label + "'";
+    });
+    check("alcohol clean-streak copy carries the regular-drinker caveat", function () {
+      // the measured improvements (liver enzymes, BP, insulin resistance)
+      // were measured in REGULAR drinkers who stopped; an occasional drinker
+      // must not be promised them
+      var st = FT.alcoholSince(logAt([["alcohol", 200]]), T0).stage;
+      var blob = st.now + " " + st.feel + " " + st.helps;
+      return /קבוע|מעט/.test(blob) ? true : "clean-streak stage promises effects universally";
+    });
+    check("the four-week meat stage cites TMAO and admits short-term inconsistency", function () {
+      var st = FT.meatSince([{ at: T0 - 700 * 3600000, key: "meat", approx: true }], T0).stage;
+      if (!/TMAO/.test(st.now)) return "TMAO not mentioned";
+      return /פחות עקביים|לא עקביים/.test(st.now) ? true : "overstated certainty on short-term findings";
+    });
+    check("the lighter-after-days feeling is stated as a report, not a measurement", function () {
+      var st = FT.meatSince([{ at: T0 - 100 * 3600000, key: "meat", approx: true }], T0).stage;
+      return /סובייקטיבי|מדווחים/.test(st.now + st.feel)
+        ? true : "subjective lightness stated as fact";
     });
 
     group("meat timeline");
@@ -937,7 +958,9 @@
         intake: [{ date: "2026-08-05", coffeeBlack: 1, coffeeMilk: 1, alcohol: 1, meat: 1 }]
       });
       var c = FT.intakeOn(FT.migrate(v3, null, null).doc.intakeLog, "2026-08-05");
-      var total = c.coffeeBlack + c.coffeeMilk + c.alcohol + c.meat;
+      // the v3 coffeeMilk count survives as coffeeBlack after the v5 relabel
+      var total = c.coffeeBlack + c.alcohol + c.meat;
+      if (c.coffeeBlack !== 2) return "coffeeMilk count lost in relabel: coffeeBlack=" + c.coffeeBlack;
       return eq(total, 4, "total events from a 4-key v3 row");
     });
 

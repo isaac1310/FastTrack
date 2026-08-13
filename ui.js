@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.6.0).
+/* FastTrack — UI layer (v2.7.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -24,10 +24,9 @@ var view = {
   chartAllGoals: false,
   editingWeightDate: null,
   showAllWeights: false,
-  showIntakeInfo: false,
-  showAyur: false,
   intakeDate: null,
   draft: null,
+  baselineLog: null,
   showBackdate: false,
   backdateValue: null,
   bannerDismissed: {},
@@ -127,9 +126,30 @@ function boot() {
     if (r.error) { loadError = r.error; doc = null; }
     else { doc = r.doc; migrated = !!r.migrated; if (migrated) saveDoc(doc); }
   }
+  /* Snapshot of the log at open, so today's edits can be cancelled back to
+     a known state — the same courtesy the past-day draft gets. */
+  if (doc) view.baselineLog = doc.intakeLog.slice();
   render();
   setInterval(tick, 1000);
   registerSW();
+}
+
+function todayDiffersFromBaseline() {
+  if (!view.baselineLog) return false;
+  var today = FT.todayISO();
+  var cur = FT.intakeOn(doc.intakeLog, today);
+  var base = FT.intakeOn(view.baselineLog, today);
+  return FT.INTAKE_ITEMS.some(function (it) { return (cur[it.key] || 0) !== (base[it.key] || 0); });
+}
+
+function restoreToday() {
+  var b = FT.dayBounds(FT.todayISO());
+  doc.intakeLog = doc.intakeLog
+    .filter(function (e) { return !e || e.at < b.from || e.at > b.to; })
+    .concat((view.baselineLog || []).filter(function (e) { return e && e.at >= b.from && e.at <= b.to; }));
+  doc.intakeLog.sort(function (x, y) { return x.at - y.at; });
+  persist(); render();
+  showToast("הצריכה של היום הוחזרה למצב הפתיחה");
 }
 
 /* ---------- PWA + reminders ---------- */
@@ -359,7 +379,9 @@ function fastingCard() {
 function sinceLabel(hours) {
   if (hours === null || !isFinite(hours)) return "—";
   if (hours < 1) return Math.round(hours * 60) + " דק׳";
-  return fmtHM(hours) + " שעות";
+  if (hours < 24) return fmtHM(hours) + " שעות";
+  var d = Math.floor(hours / 24);
+  return d + (d === 1 ? " יום" : " ימים");
 }
 
 var CAFFEINE_RELEVANT_H = 72;  // withdrawal can still be running at 2-3 days
@@ -418,7 +440,7 @@ function liveIntakeBlocks() {
   var html = "";
 
   /* ---- alcohol: how much is left, how long since, and what stage ---- */
-  if (alcSince && alcSince.hours < ALCOHOL_RELEVANT_H) {
+  if (alcSince) {
     var aStage = alcSince.stage;
     html += '<div class="blk' + (alc.units > 0.05 ? ' warn' : '') + '">' +
       '<div class="k">אלכוהול · לפני ' + sinceLabel(alcSince.hours) + ' · ' + esc(aStage.label) + '</div>' +
@@ -436,7 +458,7 @@ function liveIntakeBlocks() {
 
   /* ---- caffeine: the same, and it keeps showing after it has cleared,
      because the withdrawal window is exactly when it matters most ---- */
-  if (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) {
+  if (cafSince) {
     var cStage = cafSince.stage;
     html += '<div class="blk"><div class="k">קפאין · לפני ' + sinceLabel(cafSince.hours) +
       ' · ' + esc(cStage.label) + '</div><div class="v">';
@@ -459,10 +481,26 @@ function liveIntakeBlocks() {
   /* ---- meat: days, not hours. Only worth showing past a day, because
      under that the fasting phase card already covers the meal. ---- */
   var meat = FT.meatSince(doc.intakeLog);
-  if (meat && meat.hours >= 24) {
+  if (meat) {
     html += '<div class="blk"><div class="k">בשר · ' + agoLabel(meat.hours) +
       ' · ' + esc(meat.stage.label) + '</div><div class="v">' + esc(meat.stage.now) + '</div></div>';
     html += '<div class="blk"><div class="k">מה זה אומר</div><div class="v">' + esc(meat.stage.helps) + '</div></div>';
+  }
+
+  /* Ayurvedic reading of the same state, inline but labelled per line so the
+     traditional frame is never mistaken for the measured claims around it. */
+  var ayurBits = [];
+  if (doc.session) {
+    var ast = FT.ayurFastingStage(activeHours());
+    ayurBits.push("הצום (" + ast.qualities + "): " + ast.dosha);
+  }
+  FT.ayurActiveItems(doc.intakeLog).forEach(function (it) {
+    ayurBits.push(it.label + " (" + it.qualities + "): " + it.text);
+  });
+  if (ayurBits.length) {
+    html += '<div class="blk ayurBlk"><div class="k">במסורת האיורוודית</div><div class="v">' +
+      ayurBits.map(esc).join("<br/>") +
+      '<span class="dim" style="display:block;margin-top:4px">' + esc(FT.AYUR_NOTE) + '</span></div></div>';
   }
 
   /* Two plausible causes the app can see at once — say so rather than let
@@ -481,10 +519,7 @@ function statusCard() {
   /* Relevance is time-since-dose, not amount remaining. Caffeine at 0mg but
      14h since the last cup is the withdrawal window — the single most useful
      thing the card can say, and gating on mg > 0 would hide it. */
-  var everAny = FT.intakeSummary(doc.intakeLog).some(function (r) { return r.ever; });
-  var hasLive = everAny ||
-                (cafSince && cafSince.hours < CAFFEINE_RELEVANT_H) ||
-                (alcSince && alcSince.hours < ALCOHOL_RELEVANT_H);
+  var hasLive = FT.intakeSummary(doc.intakeLog).some(function (r) { return r.ever; });
 
   /* Shown when fasting OR when something is still circulating. Caffeine and
      alcohol are in the body whether or not a timer is running, so gating this
@@ -905,6 +940,9 @@ function intakeCard() {
   FT.INTAKE_ITEMS.forEach(function (it) {
     if (t[it.key] > 0) parts.push(esc(it.label) + " " + n(t[it.key]));
   });
+  if (isToday && todayDiffersFromBaseline()) {
+    html += '<button class="btn quiet" id="cancelToday">ביטול השינויים של היום</button>';
+  }
   if (!isToday) {
     var dirty = !!draft && FT.INTAKE_ITEMS.some(function (it) {
       return isFinite(draft[it.key]) && draft[it.key] !== Math.max(0, Number(row[it.key]) || 0);
@@ -974,69 +1012,6 @@ function intakeObservationCard() {
   return html;
 }
 
-function intakeInfoCard() {
-  var html = '<div class="card" style="gap:10px">' +
-    '<button class="toggleBtn" id="intakeInfoToggle"><span>מה זה עושה לגוף</span>' +
-    '<span class="hint" style="font-weight:400">' +
-    (view.showIntakeInfo ? "סגירה ▲" : "קפה · אלכוהול · בשר ▼") + '</span></button>';
-
-  if (view.showIntakeInfo) {
-    FT.INTAKE_ITEMS.forEach(function (it) {
-      html += '<div style="border:1px solid var(--border);border-radius:var(--r-ctl);padding:12px;' +
-        'display:flex;flex-direction:column;gap:10px">' +
-        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">' +
-        '<span style="font-size:14px;font-weight:600;color:var(--gold)">' + esc(it.label) + '</span>' +
-        '<span class="badge" style="color:' + (it.breaksFast ? "var(--rust)" : "var(--sage)") + '">' +
-        (it.breaksFast ? "שובר צום" : "לא שובר צום") + '</span></div>' +
-        '<div class="blk"><div class="k">מה קורה</div><div class="v">' + esc(it.now) + '</div></div>' +
-        '<div class="blk"><div class="k">מול הצום</div><div class="v">' + esc(it.fasting) + '</div></div>' +
-        '<div class="blk"><div class="k">מול הירידה במשקל</div><div class="v">' + esc(it.effect) + '</div></div>' +
-        '<div class="blk"><div class="k">תזמון וכמות</div><div class="v">' + esc(it.timing) + '</div></div>' +
-        (it.caution ? '<div class="blk warn"><div class="k">הערה</div><div class="v">' + esc(it.caution) + '</div></div>' : '') +
-        '</div>';
-    });
-  }
-  html += '</div>';
-  return html;
-}
-
-/* A separate lens, kept separate on purpose. See the AYUR_* block in app.js
-   for why it is not blended into the physiology copy. */
-function ayurvedaCard() {
-  var stage = doc.session ? FT.ayurFastingStage(activeHours()) : null;
-  var items = FT.ayurActiveItems(doc.intakeLog);
-  if (!stage && !items.length) return "";
-
-  var html = '<div class="card ayur" style="gap:10px">' +
-    '<button class="toggleBtn" id="ayurToggle"><span>מבט איורוודי</span>' +
-    '<span class="hint" style="font-weight:400">' +
-    (view.showAyur ? "סגירה ▲" : "מסורת · לא רפואה ▼") + '</span></button>';
-
-  if (view.showAyur) {
-    html += '<div class="ayurNote">' + esc(FT.AYUR_NOTE) + '</div>';
-
-    if (stage) {
-      html += '<div class="blk"><div class="k">הצום · ' + esc(stage.label) +
-        ' <span class="dim">(' + esc(stage.qualities) + ')</span></div>' +
-        '<div class="v">' + esc(stage.text) + '</div></div>';
-      html += '<div class="blk"><div class="k">דושות</div><div class="v">' + esc(stage.dosha) + '</div></div>';
-    }
-
-    items.forEach(function (it) {
-      html += '<div class="blk"><div class="k">' + esc(it.label) +
-        ' <span class="dim">(' + esc(it.qualities) + ')</span></div>' +
-        '<div class="v">' + esc(it.text) + '</div></div>';
-      if (doc.session && it.withFasting) {
-        html += '<div class="blk"><div class="k">ובצום</div><div class="v">' + esc(it.withFasting) + '</div></div>';
-      }
-    });
-
-    html += '<div class="note">האפליקציה לא שואלת מהי הפרקריטי (מבנה) שלך ולא מנחשת אותה — ' +
-      'זה נקבע בבדיקה אצל מטפל, לא בשאלון. מה שכתוב כאן מתאר את המצב, לא אותך.</div>';
-  }
-  html += '</div>';
-  return html;
-}
 
 /* ============================================================ *
  *  Goals
@@ -1197,7 +1172,7 @@ function render() {
     return;
   }
 
-  var colA = fastingCard() + statusCard() + ayurvedaCard() + phaseGuideCard() + intakeInfoCard();
+  var colA = fastingCard() + statusCard() + phaseGuideCard();
   var colB = paceCard() + tilesCard() + chartCard() + intakeCard() + intakeObservationCard() +
     logCard() + goalsCard() + historyCard() + settingsCard();
 
@@ -1353,9 +1328,8 @@ function wire() {
   on("intakeDate", function (e) { view.intakeDate = e.target.value; view.draft = null; render(); }, "change");
   on("intakeToday", function () { view.intakeDate = null; view.draft = null; render(); });
   on("saveIntake", saveIntakeDraft);
+  on("cancelToday", restoreToday);
   on("discardIntake", function () { view.draft = null; render(); });
-  on("intakeInfoToggle", function () { view.showIntakeInfo = !view.showIntakeInfo; render(); });
-  on("ayurToggle", function () { view.showAyur = !view.showAyur; render(); });
   each("[data-intake-inc]", function (b) {
     b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
   });
