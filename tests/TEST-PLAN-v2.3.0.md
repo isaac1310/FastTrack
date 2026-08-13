@@ -1,8 +1,8 @@
-# FastTrack — human test plan v2.2.0
+# FastTrack — human test plan v2.3.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v2.2.0`. If it doesn't, you're on a cached page and every result below is
+read `v2.3.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `88 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `105 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v2.2.0`
+Version footer checked: ☐ `v2.3.0`
 
 ---
 
-## 10 · Intake ⚠️ *new in v2.2.0*
+## 10 · Intake ⚠️ *new in v2.3.0*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -170,3 +170,30 @@ Version footer checked: ☐ `v2.2.0`
     **Expect:** ⚠️ everything intact. v3 added intake purely additively and
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
+
+## 12 · Live body status ⚠️ *new in v2.3.0*
+
+36. With no coffee or alcohol logged today and no fast running, look for the
+    "מה קורה עכשיו בגוף" card.
+    **Expect:** it isn't there. Nothing is circulating and no fast is running,
+    so it has nothing to say.
+37. Log one black coffee. Do not start a fast.
+    **Expect:** ⚠️ the card appears with a "קפאין בגוף" block showing roughly
+    100 mg and a time when it drops below 30 mg. This is the thing that was
+    missing before this version — the card used to be hidden unless a fast
+    was running.
+38. Watch the mg figure across a few minutes.
+    **Expect:** it drifts downward on its own, without the page reloading.
+39. Log a second coffee.
+    **Expect:** the figure jumps by about 100 and the clear-time moves later.
+40. Log one alcohol.
+    **Expect:** a rust-coloured "אלכוהול בדם" block saying roughly 1 unit is
+    still to clear, with a time, and that fat oxidation is suppressed until
+    then. About an hour later it should be gone.
+41. Read the grey note at the bottom of the card.
+    **Expect:** ⚠️ it states plainly that these are estimates from typical
+    values, not measurements. If that line is missing, the card is
+    overclaiming.
+42. Switch the צריכה date to a past day and log a coffee there.
+    **Expect:** the daily and weekly counts include it, but the live caffeine
+    figure does **not** move. A dose with no real time can't be circulating now.
