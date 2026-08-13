@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.5.1).
+/* FastTrack — UI layer (v2.6.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -25,7 +25,9 @@ var view = {
   editingWeightDate: null,
   showAllWeights: false,
   showIntakeInfo: false,
+  showAyur: false,
   intakeDate: null,
+  draft: null,
   showBackdate: false,
   backdateValue: null,
   bannerDismissed: {},
@@ -870,17 +872,26 @@ function intakeCard() {
       '<button class="linkBtn" id="intakeToday">חזרה להיום</button></div>';
   }
 
+  /* Today writes on each tap — you can see the result immediately and the
+     live status reacts. A past day cannot show you anything changing, so it
+     is staged and saved explicitly. That is also the project's own rule:
+     explicit save, never autosave, and never a confirmation that can lie. */
+  var draft = (!isToday && view.draft && view.draft.date === date) ? view.draft.counts : null;
+
   html += '<div class="rows">';
   FT.INTAKE_ITEMS.forEach(function (it) {
-    var c = Math.max(0, Number(row[it.key]) || 0);
+    var saved = Math.max(0, Number(row[it.key]) || 0);
+    var c = draft && isFinite(draft[it.key]) ? draft[it.key] : saved;
+    var changed = !isToday && c !== saved;
     html += '<div class="row" style="padding:8px 2px">' +
       '<span style="display:flex;flex-direction:column;gap:1px;min-width:0">' +
       '<span style="font-size:14px;font-weight:500">' + esc(it.label) + '</span>' +
       '<span style="font-size:11px;color:var(--dim)">' + esc(it.unit) +
       (it.breaksFast ? ' · שובר צום' : ' · לא שובר צום') +
       (lastOf(it.key) ? ' · אחרון ' + agoLabel(lastOf(it.key)) : '') + '</span>' +
+      (it.hint ? '<span style="font-size:11px;color:var(--dim)">' + esc(it.hint) + '</span>' : '') +
       '</span>' +
-      '<span class="stepper">' +
+      '<span class="stepper' + (changed ? ' dirty' : '') + '">' +
       '<button class="stepBtn" data-intake-dec="' + it.key + '" aria-label="פחות">−</button>' +
       '<span class="stepVal n" id="intakeVal_' + it.key + '">' + c + '</span>' +
       '<button class="stepBtn" data-intake-inc="' + it.key + '" aria-label="עוד">+</button>' +
@@ -894,6 +905,16 @@ function intakeCard() {
   FT.INTAKE_ITEMS.forEach(function (it) {
     if (t[it.key] > 0) parts.push(esc(it.label) + " " + n(t[it.key]));
   });
+  if (!isToday) {
+    var dirty = !!draft && FT.INTAKE_ITEMS.some(function (it) {
+      return isFinite(draft[it.key]) && draft[it.key] !== Math.max(0, Number(row[it.key]) || 0);
+    });
+    html += '<div class="btnRow">' +
+      '<button class="btn gold grow" id="saveIntake"' + (dirty ? '' : ' disabled') + '>' +
+      (dirty ? 'שמירה ל' + fmtDate(date) : 'אין שינוי לשמור') + '</button>' +
+      (dirty ? '<button class="btn quiet" id="discardIntake">ביטול</button>' : '') + '</div>';
+  }
+
   html += '<div class="note">השבוע: ' + (parts.length ? parts.join(" · ") : "עדיין כלום") + '</div>';
   html += '</div>';
   return html;
@@ -974,6 +995,44 @@ function intakeInfoCard() {
         (it.caution ? '<div class="blk warn"><div class="k">הערה</div><div class="v">' + esc(it.caution) + '</div></div>' : '') +
         '</div>';
     });
+  }
+  html += '</div>';
+  return html;
+}
+
+/* A separate lens, kept separate on purpose. See the AYUR_* block in app.js
+   for why it is not blended into the physiology copy. */
+function ayurvedaCard() {
+  var stage = doc.session ? FT.ayurFastingStage(activeHours()) : null;
+  var items = FT.ayurActiveItems(doc.intakeLog);
+  if (!stage && !items.length) return "";
+
+  var html = '<div class="card ayur" style="gap:10px">' +
+    '<button class="toggleBtn" id="ayurToggle"><span>מבט איורוודי</span>' +
+    '<span class="hint" style="font-weight:400">' +
+    (view.showAyur ? "סגירה ▲" : "מסורת · לא רפואה ▼") + '</span></button>';
+
+  if (view.showAyur) {
+    html += '<div class="ayurNote">' + esc(FT.AYUR_NOTE) + '</div>';
+
+    if (stage) {
+      html += '<div class="blk"><div class="k">הצום · ' + esc(stage.label) +
+        ' <span class="dim">(' + esc(stage.qualities) + ')</span></div>' +
+        '<div class="v">' + esc(stage.text) + '</div></div>';
+      html += '<div class="blk"><div class="k">דושות</div><div class="v">' + esc(stage.dosha) + '</div></div>';
+    }
+
+    items.forEach(function (it) {
+      html += '<div class="blk"><div class="k">' + esc(it.label) +
+        ' <span class="dim">(' + esc(it.qualities) + ')</span></div>' +
+        '<div class="v">' + esc(it.text) + '</div></div>';
+      if (doc.session && it.withFasting) {
+        html += '<div class="blk"><div class="k">ובצום</div><div class="v">' + esc(it.withFasting) + '</div></div>';
+      }
+    });
+
+    html += '<div class="note">האפליקציה לא שואלת מהי הפרקריטי (מבנה) שלך ולא מנחשת אותה — ' +
+      'זה נקבע בבדיקה אצל מטפל, לא בשאלון. מה שכתוב כאן מתאר את המצב, לא אותך.</div>';
   }
   html += '</div>';
   return html;
@@ -1138,7 +1197,7 @@ function render() {
     return;
   }
 
-  var colA = fastingCard() + statusCard() + phaseGuideCard() + intakeInfoCard();
+  var colA = fastingCard() + statusCard() + ayurvedaCard() + phaseGuideCard() + intakeInfoCard();
   var colB = paceCard() + tilesCard() + chartCard() + intakeCard() + intakeObservationCard() +
     logCard() + goalsCard() + historyCard() + settingsCard();
 
@@ -1291,9 +1350,12 @@ function wire() {
   });
 
   // intake
-  on("intakeDate", function (e) { view.intakeDate = e.target.value; render(); }, "change");
-  on("intakeToday", function () { view.intakeDate = null; render(); });
+  on("intakeDate", function (e) { view.intakeDate = e.target.value; view.draft = null; render(); }, "change");
+  on("intakeToday", function () { view.intakeDate = null; view.draft = null; render(); });
+  on("saveIntake", saveIntakeDraft);
+  on("discardIntake", function () { view.draft = null; render(); });
   on("intakeInfoToggle", function () { view.showIntakeInfo = !view.showIntakeInfo; render(); });
+  on("ayurToggle", function () { view.showAyur = !view.showAyur; render(); });
   each("[data-intake-inc]", function (b) {
     b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
   });
@@ -1412,13 +1474,27 @@ function bumpIntake(key, delta) {
   var date = view.intakeDate || FT.todayISO();
   var isToday = date === FT.todayISO();
 
+  /* A past day is staged, not written. Nothing on screen changes to prove a
+     past-day write happened, so there has to be a save the user performs. */
+  if (!isToday) {
+    if (!view.draft || view.draft.date !== date) {
+      var counts = FT.intakeOn(doc.intakeLog, date);
+      view.draft = { date: date, counts: {} };
+      FT.INTAKE_ITEMS.forEach(function (it) {
+        view.draft.counts[it.key] = Math.max(0, Number(counts[it.key]) || 0);
+      });
+    }
+    var cur = view.draft.counts[key] || 0;
+    view.draft.counts[key] = Math.max(0, cur + delta);
+    render();
+    return;
+  }
+
+  var have = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[key]) || 0);
+  if (delta < 0 && have === 0) return;
+
   if (delta > 0) {
-    /* The timestamp is recorded automatically — that is what makes the live
-       body status possible, and it costs no extra tap. A backdated entry has
-       no real time, so it lands at noon flagged approx and is excluded from
-       the live estimates while still counting toward totals. */
-    var at = isToday ? Date.now() : new Date(date + "T12:00:00").getTime();
-    var r = FT.addIntakeEvent(doc.intakeLog, key, at, !isToday);
+    var r = FT.addIntakeEvent(doc.intakeLog, key, Date.now(), false);
     if (!r.added) return;
     doc.intakeLog = r.log;
   } else {
@@ -1433,15 +1509,44 @@ function bumpIntake(key, delta) {
 
   /* Only prompt for things that actually break a fast — black coffee and
      plain tea don't, and nagging every morning would train you to ignore it.
-     Offered, never automatic: a mistap must not destroy a running timer, and
-     you may be logging something from before the fast started. */
-  if (delta > 0 && doc.session && FT.breaksFast(key) && isToday) {
+     Offered, never automatic: a mistap must not destroy a running timer. */
+  if (delta > 0 && doc.session && FT.breaksFast(key)) {
     var item = FT.intakeItem(key);
     showToast(item.label + " בזמן צום של " + fmtHM(activeHours()) + " שעות — זה שובר את הצום.", {
       label: "סיים צום",
       fn: function () { stopFast(); }
     });
   }
+}
+
+/* Applies the staged counts for a past day by adding or removing events until
+   each item matches. Backdated events land at noon flagged approx, so they
+   count toward totals but never toward the live "circulating now" figures. */
+function saveIntakeDraft() {
+  if (!view.draft) return;
+  var date = view.draft.date;
+  var noonMs = new Date(date + "T12:00:00").getTime();
+  var changedItems = [];
+
+  FT.INTAKE_ITEMS.forEach(function (it) {
+    var want = Math.max(0, Number(view.draft.counts[it.key]) || 0);
+    var have = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[it.key]) || 0);
+    if (want === have) return;
+    changedItems.push(it.label);
+    var i;
+    for (i = have; i < want; i++) {
+      doc.intakeLog = FT.addIntakeEvent(doc.intakeLog, it.key, noonMs + i * 60000, true).log;
+    }
+    for (i = have; i > want; i--) {
+      doc.intakeLog = FT.removeIntakeEvent(doc.intakeLog, it.key, date).log;
+    }
+  });
+
+  var ok = persist();
+  view.draft = null;
+  render();
+  showToast(ok ? "נשמר ל" + fmtDate(date) + " · " + changedItems.join(", ")
+               : "לא ניתן לשמור במכשיר הזה");
 }
 
 function saveMeasure() {

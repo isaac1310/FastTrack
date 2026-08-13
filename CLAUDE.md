@@ -47,25 +47,34 @@ Full list in `DESIGN-BRIEF.md` §3. The four that have already caused shipped bu
 3. **`render()` / `tick()` split.** `tick()` patches text and geometry by id
    only. Touching `innerHTML` on a container holding an input closes an open
    date picker mid-use.
-4. **The app tracks meat, not protein.** It cannot see eggs, fish, dairy or
-   legumes, so multi-day meat copy must never imply a protein shortfall it
-   has no way to observe. Say what is unknown.
-5. **When two causes are both visible, name both.** A headache at 8h since
+4. **Meat is tracked as a digestive burden and a streak, not as a nutrient.**
+   Slower gastric emptying is measurable and may be stated. "Clean of meat"
+   is a fact about what you ate — never detoxification, never toxin
+   accumulation. The traditional "heavy/guru" framing belongs in the
+   Ayurvedic section, not the physiology.
+5. **The Ayurvedic lens stays a separate, labelled card.** Blending a
+   traditional framework into measured physiology misrepresents both. It
+   describes state, never prescribes; it does not ask for or infer a
+   constitution.
+6. **Migrations speak the SOURCE version's vocabulary.** The v3 converter
+   lists its keys explicitly. Iterating the current `INTAKE_ITEMS` silently
+   dropped every count whose key had been renamed.
+7. **When two causes are both visible, name both.** A headache at 8h since
    coffee during a 14h fast has two plausible sources — falling caffeine and
    sodium loss — and the app cannot tell which. `headacheAmbiguous()` exists
    so it says so instead of confidently blaming one.
-6. **Withdrawal copy applies to regular users only,** and must say so. Someone
+8. **Withdrawal copy applies to regular users only,** and must say so. Someone
    who drinks coffee occasionally does not get caffeine withdrawal.
-7. **Live body estimates are estimates, and must say so.** `caffeineNow()` and
+9. **Live body estimates are estimates, and must say so.** `caffeineNow()` and
    `alcoholNow()` are built from typical values (~100mg a cup, ~5h half-life,
    ~1 drink/hour) that vary hugely between people. Backdated entries carry
    `approx` and are excluded from them — claiming a dose from last Tuesday is
    circulating now would be inventing data.
-8. **Never claim causation from the intake table.** Five weeks is far too
+10. **Never claim causation from the intake table.** Five weeks is far too
    small a sample, and weight moves with sleep, salt and everything unlogged.
    Show the columns side by side; refuse a read below 4 weeks; flag any week
    fitted from fewer than 4 weigh-ins.
-9. **Pace math fits the RAW points, never the smoothed series.** An EMA lags,
+11. **Pace math fits the RAW points, never the smoothed series.** An EMA lags,
    which biases its slope toward zero — fitting it reported −0.46 kg/week on a
    true −0.91, i.e. "behind pace" while exactly on pace. `smoothWeights()` is
    presentation only; `trendFit()` is the number.
@@ -80,11 +89,11 @@ node build.mjs
 ```
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run at **both** 412px
-and desktop. Expect `139 passed, 0 failed, 1 skipped` at each; the skip is the
+and desktop. Expect `151 passed, 0 failed, 1 skipped` at each; the skip is the
 opposite width's layout check and must state its reason. **A skip without a
 reason is a failure, and a run with skips is never "all passed."**
 
-Then the human pass: `tests/TEST-PLAN-v2.5.1.md`.
+Then the human pass: `tests/TEST-PLAN-v2.6.0.md`.
 
 Verify UI in a real browser before claiming it works. Every visual bug in this
 project so far was invisible in code and obvious on screen.
