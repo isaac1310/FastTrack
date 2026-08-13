@@ -456,6 +456,84 @@
         ? true : "recovery stage lost the point that BAC is already zero";
     });
 
+    group("intakeSummary");
+    var SCENARIO = [
+      { at: T0 - 5 * 3600000, key: "coffeeBlack", approx: false },
+      { at: T0 - 3 * 24 * 3600000, key: "meat", approx: true },
+      { at: T0 - 7 * 24 * 3600000, key: "alcohol", approx: true }
+    ];
+    check("reports all three groups even when they were never logged", function () {
+      var r = FT.intakeSummary([], T0);
+      if (r.length !== 3) return "expected 3 groups, got " + r.length;
+      return r.every(function (g) { return g.ever === false && g.stage === null; })
+        ? true : "a never-logged group claimed a stage";
+    });
+    check("coffee this morning, meat 3 days, alcohol a week — all read correctly", function () {
+      var r = FT.intakeSummary(SCENARIO, T0);
+      var by = {}; r.forEach(function (g) { by[g.id] = g; });
+      if (Math.abs(by.caffeine.hours - 5) > 0.01) return "caffeine hours wrong: " + by.caffeine.hours;
+      if (by.meat.days !== 3) return "meat days wrong: " + by.meat.days;
+      if (by.alcohol.days !== 7) return "alcohol days wrong: " + by.alcohol.days;
+      return true;
+    });
+    check("includes backdated entries — they have a known day", function () {
+      // excluding them made a quick-backfilled meat entry vanish from the card
+      var r = FT.intakeSummary(SCENARIO, T0);
+      var meat = r.filter(function (g) { return g.id === "meat"; })[0];
+      return meat.ever === true ? true : "backdated meat was treated as never logged";
+    });
+    check("flags rows whose last entry has no exact time", function () {
+      var r = FT.intakeSummary(SCENARIO, T0);
+      var by = {}; r.forEach(function (g) { by[g.id] = g; });
+      if (by.meat.approxOnly !== true) return "backdated meat not flagged approx";
+      if (by.caffeine.approxOnly !== false) return "exact coffee wrongly flagged approx";
+      return true;
+    });
+    check("a week-old drink lands in the baseline stage, not the hangover window", function () {
+      var r = FT.intakeSummary(SCENARIO, T0);
+      var alc = r.filter(function (g) { return g.id === "alcohol"; })[0];
+      return /קו הבסיס/.test(alc.stage.label) ? true : "got stage '" + alc.stage.label + "'";
+    });
+
+    group("meat timeline");
+    check("stages land correctly by hours", function () {
+      var cases = [[1, "עיכול"], [10, "אחרי"], [40, "יום-שלושה"], [100, "מעל שלושה"]];
+      for (var i = 0; i < cases.length; i++) {
+        var r = FT.meatSince([{ at: T0 - cases[i][0] * 3600000, key: "meat", approx: false }], T0);
+        if (r.stage.label.indexOf(cases[i][1]) === -1) {
+          return cases[i][0] + "h landed in '" + r.stage.label + "'";
+        }
+      }
+      return true;
+    });
+    check("multi-day copy admits the app cannot see total protein", function () {
+      // it tracks meat, not protein — implying a shortfall it cannot observe
+      // would be inventing a problem
+      var r = FT.meatSince([{ at: T0 - 100 * 3600000, key: "meat", approx: false }], T0);
+      var blob = r.stage.now + " " + r.stage.helps;
+      return /ביצים|דגים|מקורות אחרים|לא יודעת/.test(blob)
+        ? true : "meat copy implies a protein deficit the app cannot see";
+    });
+    check("includes backdated entries, unlike the hour-scale timelines", function () {
+      var l = [{ at: T0 - 48 * 3600000, key: "meat", approx: true }];
+      return FT.meatSince(l, T0) !== null ? true : "backdated meat vanished";
+    });
+
+    group("abstinenceDays");
+    check("something logged today breaks the streak", function () {
+      // scanning backwards from yesterday never finds today's entry, so
+      // without an explicit check this reported a 400-day streak
+      var l = [{ at: T0 - 2 * 3600000, key: "coffeeBlack", approx: false }];
+      return eq(FT.abstinenceDays(l, FT.CAFFEINE_KEYS, T0), 0, "clean days");
+    });
+    check("counts whole clean days back from yesterday", function () {
+      return eq(FT.abstinenceDays(SCENARIO, FT.ALCOHOL_KEYS, T0), 6, "alcohol clean days");
+    });
+    check("never logged returns null, not zero", function () {
+      // "0 clean days" and "never touched it" must not look alike
+      return isNull(FT.abstinenceDays([], FT.ALCOHOL_KEYS, T0), "abstinenceDays");
+    });
+
     group("headache ambiguity");
     check("fires when caffeine is falling AND the fast is deep enough", function () {
       // both causes visible at once: the app must not blame one
