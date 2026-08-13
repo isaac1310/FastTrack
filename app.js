@@ -4,9 +4,9 @@
  */
 "use strict";
 
-var APP_VERSION = "2.6.0";
+var APP_VERSION = "2.7.0";
 var LS_KEY = "fasttrack.doc";
-var SCHEMA_VERSION = 4;
+var SCHEMA_VERSION = 5;
 
 /* ============================================================ *
  *  Fasting phases
@@ -99,17 +99,9 @@ var INTAKE_ITEMS = [
   {
     key: "coffeeBlack", label: "קפה שחור", unit: "כוסות", breaksFast: false, caffeineMg: 100,
     now: "קפאין חוסם קולטני אדנוזין — לא מוסיף אנרגיה, רק מסתיר את תחושת העייפות עד שהוא מתפוגג.",
-    fasting: "כוס קפה שחור היא בערך 2 קלוריות. היא לא שוברת צום, וגם תה ירוק או שחור בלי סוכר וחלב לא.",
+    fasting: "כוס קפה שחור היא בערך 2 קלוריות. היא לא שוברת צום, וגם תה ירוק או שחור בלי סוכר וחלב לא. עם חלב או סוכר — זה כבר סיפור אחר, וזה שובר.",
     effect: "מעלה קלות את קצב חילוף החומרים וחמצון השומן לטווח קצר. ההשפעה אמיתית אבל צנועה, ונחלשת עם סבילות.",
     timing: "זמן מחצית החיים של קפאין הוא כ-5 שעות, ומשתנה מאוד בין אנשים (בערך 3–7). קפה של אחר הצהריים עדיין פעיל בגוף בלילה ופוגע בשינה העמוקה — גם אצל מי שנרדם בלי בעיה.",
-    caution: null
-  },
-  {
-    key: "coffeeMilk", label: "קפה עם חלב/סוכר", unit: "כוסות", breaksFast: true, caffeineMg: 100,
-    now: "מה שמוסיפים לקפה הוא מה שקובע. חלב וסוכר מכניסים קלוריות ומעלים אינסולין.",
-    fasting: "שובר את הצום. הקפה עצמו לא הבעיה — התוספת כן.",
-    effect: "קפה הפוך גדול יכול להיות ארוחה קטנה מבחינת קלוריות, בלי תחושת השובע של ארוחה.",
-    timing: "אותה השפעה של קפאין על השינה כמו קפה שחור.",
     caution: null
   },
   {
@@ -238,6 +230,15 @@ function migrate(raw, v1entries, v1session) {
         parsed.intakeLog = log;
         delete parsed.intake;
         parsed.schemaVersion = 4;
+      }
+      if (parsed.schemaVersion === 4) {
+        /* v5 drops "coffee with milk" as a separate item. For everything the
+           app computes with it — caffeine, timing — it IS a coffee, so old
+           events are relabelled rather than discarded. */
+        (Array.isArray(parsed.intakeLog) ? parsed.intakeLog : []).forEach(function (e) {
+          if (e && e.key === "coffeeMilk") e.key = "coffeeBlack";
+        });
+        parsed.schemaVersion = 5;
       }
       return { doc: normalizeDoc(parsed), migrated: true };
     }
@@ -628,10 +629,22 @@ var ALCOHOL_TIMELINE = [
     helps: "מים ומלח. אוכל. אם אתה בצום — לשקול לדחות אותו, גוף מיובש וצום לא הולכים טוב יחד."
   },
   {
-    from: 16, to: Infinity, label: "חזרה לקו הבסיס",
-    now: "ההשפעות המטבוליות והשינתיות חלפו.",
-    feel: "בדרך כלל שום דבר.",
+    from: 16, to: 72, label: "ימים ראשונים נקי",
+    now: "ההשפעה הישירה חלפה. אצל מי ששותה באופן קבוע, סמני דלקת בכבד (ALT/AST) מתחילים לרדת תוך 5–7 ימים נקיים.",
+    feel: "דווקא כאן השינה יכולה להיות גרועה יותר לכמה לילות אצל שתיין קבוע — זה משתפר. מי ששותה מעט ולעיתים רחוקות כנראה לא ירגיש כלום.",
+    helps: "להמשיך. רוב השיפורים המדידים מגיעים בשבועות, לא בימים."
+  },
+  {
+    from: 72, to: 168, label: "שבוע ראשון נקי",
+    now: "אצל שתיינים קבועים במחקרים: שומן כבדי מתחיל לרדת, ולחץ הדם מתחיל לזוז כלפי מטה במהלך השבועיים הראשונים.",
+    feel: "שינה עמוקה ויציבה יותר אצל רוב האנשים, תיאבון מסודר יותר.",
     helps: "—"
+  },
+  {
+    from: 168, to: Infinity, label: "שבוע ומעלה נקי",
+    now: "בניסויי חודש-בלי-אלכוהול על שותים קבועים נמדדו: תנגודת אינסולין נמוכה בכ-25%, לחץ דם סיסטולי נמוך בכ-5 יחידות, ושומן כבדי מופחת. אצל מי ששתה מעט מלכתחילה, השינויים קטנים בהתאם.",
+    feel: "היתרון המורגש ביותר בדיווחים הוא שינה.",
+    helps: "המספרים האלה נמדדו אצל שותים קבועים שהפסיקו. הם לא הבטחה אישית — אבל הכיוון עקבי במחקרים."
   }
 ];
 
@@ -661,10 +674,16 @@ var MEAT_TIMELINE = [
     helps: "אם המטרה היא פחות כובד — זה בדיוק מה שהמונה הזה מראה."
   },
   {
-    from: 72, to: Infinity, label: "רצף ארוך נקי",
-    now: "רצף ארוך בלי בשר. שוב — זו עובדה על ההרגל, לא על ניקוי הגוף.",
-    feel: "משתנה מאוד בין אנשים.",
+    from: 72, to: 672, label: "רצף ארוך נקי",
+    now: "הרבה מדווחים על תחושת קלילות אחרי כמה ימים בלי בשר. זה דיווח אמיתי ונפוץ — אבל סובייקטיבי: מה שנמדד הוא שמערכת העיכול עסוקה פחות בארוחות שמתרוקנות לאט, לא שהגוף \"התנקה\".",
+    feel: "קלילות, עיכול נוח יותר — אצל חלק. אחרים לא מרגישים דבר, ושניהם נורמליים.",
     helps: "בגירעון קלורי כדאי לוודא שיש חלבון מאיפשהו — דגים, ביצים, חלב או קטניות — כי חלבון מספיק הוא מה ששומר על מסת שריר. האפליקציה לא רואה את אלה ולא סופרת אותם."
+  },
+  {
+    from: 672, to: Infinity, label: "מעל ארבעה שבועות",
+    now: "השינוי המדיד היחיד עם ציר זמן בספרות: TMAO — תוצר של חיידקי מעי שמעכלים בשר אדום, שנקשר במחקרים לסיכון לב-וכלי-דם — יורד משמעותית תוך כ-4 שבועות בלי בשר אדום. ממצאי הטווח הקצר פחות עקביים.",
+    feel: "אין תסמין מורגש שמיוחס לזה.",
+    helps: "עדיין: חלבון ממקורות אחרים, כל יום."
   }
 ];
 
@@ -871,7 +890,7 @@ function timelineStage(timeline, hours) {
   return timeline[timeline.length - 1];
 }
 
-var CAFFEINE_KEYS = ["coffeeBlack", "coffeeMilk"];
+var CAFFEINE_KEYS = ["coffeeBlack"];
 var ALCOHOL_KEYS = ["alcohol"];
 
 /* "Last coffee 8 hours ago" + what stage that is + what people feel there. */
@@ -887,8 +906,11 @@ function caffeineSince(log, nowMs) {
   };
 }
 
+/* Includes backdated entries, like meatSince: the later stages are measured
+ * in days, where "logged on Tuesday" is exact enough. The hour-scale numbers
+ * (units still clearing) stay in alcoholNow(), which does exclude them. */
 function alcoholSince(log, nowMs) {
-  var s = hoursSinceLast(log, ALCOHOL_KEYS, nowMs);
+  var s = hoursSinceLast(log, ALCOHOL_KEYS, nowMs, true);
   if (!s) return null;
   var stage = timelineStage(ALCOHOL_TIMELINE, s.hours);
   var next = ALCOHOL_TIMELINE[ALCOHOL_TIMELINE.indexOf(stage) + 1] || null;
