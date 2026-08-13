@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "2.7.0";
+var APP_VERSION = "2.8.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 5;
 
@@ -109,17 +109,27 @@ var INTAKE_ITEMS = [
     now: "הגוף מתייחס לאלכוהול כאל רעל ונותן לפינוי שלו עדיפות על כל דלק אחר.",
     fasting: "שובר את הצום.",
     effect: "כל עוד יש אלכוהול בדם, חמצון השומן מדוכא — הגוף שורף את האלכוהול במקום את השומן. זו ההשפעה הישירה ביותר מבין השלושה על ירידה במשקל. בנוסף: 7 קלוריות לגרם, כמעט בלי ערך תזונתי, והוא מגביר תיאבון ומחליש שליטה על אכילה.",
-    timing: "מנה סטנדרטית היא כ-14 גרם אלכוהול — בערך פחית בירה, כוס יין קטנה או שוט. הגוף מפנה בערך מנה אחת בשעה. אלכוהול בערב פוגע במבנה השינה ומדכא שנת REM, גם כשהוא עוזר להירדם.",
+    timing: "מנה סטנדרטית היא כ-14 גרם אלכוהול — בערך פחית בירה, כוס יין קטנה או שוט. הגוף מפנה בערך מנה אחת בשעה, בקצב קבוע שאי אפשר לזרז. אלכוהול בערב מדכא את שנת ה-REM בחצי הראשון של הלילה וגורם ליקיצות בחצי השני — גם כשהוא עוזר להירדם, השינה שווה פחות.",
     caution: "המספרים כאן הם על ההשפעה המטבולית בלבד. שאלות של כמות בטוחה או תלות הן עניין לרופא, לא לאפליקציה."
   },
   {
     key: "meat", label: "בשר", unit: "מנות", breaksFast: true,
     hint: "בקר, עוף, כבש. דגים קלים יותר לעיכול — תחליט אם לספור אותם",
-    now: "בשר יוצא מהקיבה לאט יותר מפחמימות. השילוב של חלבון ושומן מאט את קצב ההתרוקנות, ולכן הארוחה 'יושבת' זמן רב יותר.",
+    now: "בשר יוצא מהקיבה לאט יותר מפחמימות: ארוחה עשירה בחלבון ושומן יכולה לשהות בקיבה 4–5 שעות, לעומת 2–3 לארוחה קלה. לכן היא 'יושבת'.",
     fasting: "שובר את הצום.",
     effect: "כ-20–30% מהקלוריות שבחלבון נשרפות על העיכול עצמו — יותר מכל מקרו אחר. זה גם מה שמשביע לאורך זמן, וגם מה שגורם לתחושת הכובד.",
     timing: "ארוחה כבדה לפני שינה נשארת בעיכול בזמן שהגוף אמור לנוח. מרווח של כמה שעות עוזר.",
     caution: "עיכול איטי יותר זה עובדה מדידה. מעבר לזה, טענות על \"ניקוי\" או הצטברות רעלים מבשר אינן מבוססות — האפליקציה סופרת ימים, היא לא מבטיחה ניקיון."
+  }
+,
+  {
+    key: "gluten", label: "גלוטן", unit: "מנות", breaksFast: true,
+    hint: "לחם, פסטה, מאפים, קוסקוס, בירה",
+    now: "גלוטן הוא חלבון החיטה, השעורה והשיפון. אצל מי שאין לו צליאק או רגישות מאובחנת, הוא מתעכל כמו כל חלבון אחר.",
+    fasting: "שובר את הצום — בגלל הקלוריות, לא בגלל הגלוטן.",
+    effect: "לירידה במשקל אין לגלוטן עצמו השפעה מיוחדת. אם הורדת גלוטן עוזרת, זה לרוב כי ירדו איתו לחם ומאפים — כלומר קלוריות — או בגלל ה-FODMAP שבחיטה, לא החלבון.",
+    timing: "נפיחות אחרי ארוחת פסטה מגיעה בדרך כלל מהפחמימות המותססות (FODMAP) שבחיטה, לא מהגלוטן. במבחנים עיוורים, רק כ-8% ממי שהגדירו עצמם רגישים לגלוטן הגיבו לגלוטן לבדו.",
+    caution: "אם יש חשד אמיתי לצליאק — בדיקת דם לפני שמפסיקים גלוטן. הפסקה מוקדמת משבשת את האבחנה, וזה הדבר היחיד כאן שהוא באמת עניין רפואי."
   }
 ];
 
@@ -746,6 +756,12 @@ var AYUR_ITEMS = {
     text: "מתואר כמעלה פיטה בעיקר — חום, חדות, עצבנות — ובכמות גדולה גם מפר את שלושת הדושות יחד.",
     withFasting: "המסורת מתייחסת לאלכוהול בצום כאל שילוב שמכביד על העיכול דווקא כשהוא הכי חלש."
   },
+  gluten: {
+    label: "גלוטן (חיטה)",
+    qualities: "כבד, מתוק, מקרר",
+    text: "החיטה עצמה נחשבת במסורת למזון מזין, כבד ומתוק — מעלה קפהה ומרגיע ואטה ופיטה. המסורת לא מכירה \"גלוטן\"; היא מדברת על החיטה כמכלול.",
+    withFasting: "מאפה כבד כשבירת צום נחשב במסורת לעומס על אגני חלשה — עוד סיבה, מהכיוון שלה, לשבור צום בקל."
+  },
   meat: {
     label: "בשר",
     qualities: "גוּרוּ — כבד, איטי, מקרקע",
@@ -767,6 +783,8 @@ function ayurActiveItems(log, nowMs) {
   if (alc && alc.hours < 24) out.push(Object.assign({ id: "alcohol" }, AYUR_ITEMS.alcohol));
   var mt = meatSince(log, nowMs);
   if (mt && mt.hours < 24) out.push(Object.assign({ id: "meat" }, AYUR_ITEMS.meat));
+  var gl = glutenSince(log, nowMs);
+  if (gl && gl.hours < 24) out.push(Object.assign({ id: "gluten" }, AYUR_ITEMS.gluten));
   return out;
 }
 
@@ -922,6 +940,39 @@ function alcoholSince(log, nowMs) {
 }
 
 var MEAT_KEYS = ["meat"];
+var GLUTEN_KEYS = ["gluten"];
+
+/* The most overclaimed ingredient there is, so the copy leans on the blinded
+ * evidence: without celiac or a diagnosed sensitivity, a gluten-free streak
+ * has no established physiology, and the felt improvements mostly trace to
+ * FODMAPs and to eating less bread — both real, neither gluten. */
+var GLUTEN_TIMELINE = [
+  {
+    from: 0, to: 6, label: "עיכול",
+    now: "הארוחה מתעכלת. אם מגיעה נפיחות, האשם הסביר הוא הפחמימות המותססות (FODMAP) שבחיטה — הן מייצרות גז במעי — ולא חלבון הגלוטן.",
+    feel: "אצל רוב האנשים: כלום. אצל רגישים: נפיחות וגזים בשעות הקרובות.",
+    helps: "—"
+  },
+  {
+    from: 6, to: 72, label: "ימים ראשונים בלי",
+    now: "בלי צליאק או רגישות מאובחנת, אין תהליך פיזיולוגי ידוע שמתרחש כשמפסיקים גלוטן. אם מרגישים קל יותר — זה אמיתי, אבל במבחנים עיוורים ההסבר היה כמעט תמיד FODMAP או פשוט פחות לחם ומאפים.",
+    feel: "מי שרגיש ל-FODMAP מדווח על פחות נפיחות תוך ימים.",
+    helps: "אם הנפיחות היא הבעיה, שווה לשים לב גם לבצל, שום וקטניות — מקורות FODMAP גדולים שנשארים בתפריט נטול גלוטן."
+  },
+  {
+    from: 72, to: Infinity, label: "רצף בלי גלוטן",
+    now: "בפרוטוקולים קליניים, אלימינציה נמשכת 2–6 שבועות ואז החזרה מבוקרת — כי רק החזרה מוכיחה מה באמת הפריע. במבחנים עיוורים רק כ-8% ממי שהגדירו עצמם רגישים הגיבו לגלוטן לבדו.",
+    feel: "משתנה. שיפור מורגש הוא ממצא אמיתי על התפריט שלך — הוא רק לא מוכיח שהגלוטן היה האשם.",
+    helps: "אם יש חשד לצליאק, בדיקת דם לפני שממשיכים בהימנעות — הפסקה ארוכה משבשת את האבחנה."
+  }
+];
+
+function glutenSince(log, nowMs) {
+  var s = hoursSinceLast(log, GLUTEN_KEYS, nowMs, true);
+  if (!s) return null;
+  var stage = timelineStage(GLUTEN_TIMELINE, s.hours);
+  return { at: s.at, hours: +s.hours.toFixed(2), days: +(s.hours / 24).toFixed(2), stage: stage };
+}
 
 /* Includes backdated entries, unlike caffeineSince/alcoholSince. Those drive
  * hour-scale pharmacokinetics where a missing time would fabricate precision;
@@ -948,7 +999,8 @@ function intakeSummary(log, nowMs) {
   var groups = [
     { id: "caffeine", label: "קפה", keys: CAFFEINE_KEYS, timeline: CAFFEINE_TIMELINE },
     { id: "alcohol", label: "אלכוהול", keys: ALCOHOL_KEYS, timeline: ALCOHOL_TIMELINE },
-    { id: "meat", label: "בשר", keys: MEAT_KEYS, timeline: MEAT_TIMELINE }
+    { id: "meat", label: "בשר", keys: MEAT_KEYS, timeline: MEAT_TIMELINE },
+    { id: "gluten", label: "גלוטן", keys: GLUTEN_KEYS, timeline: GLUTEN_TIMELINE }
   ];
 
   return groups.map(function (g) {
@@ -1210,6 +1262,7 @@ window.FT = {
   caffeineNow: caffeineNow, alcoholNow: alcoholNow,
   caffeineSince: caffeineSince, alcoholSince: alcoholSince, meatSince: meatSince,
   intakeSummary: intakeSummary, abstinenceDays: abstinenceDays,
+  glutenSince: glutenSince, GLUTEN_KEYS: GLUTEN_KEYS, GLUTEN_TIMELINE: GLUTEN_TIMELINE,
   MEAT_TIMELINE: MEAT_TIMELINE, MEAT_KEYS: MEAT_KEYS,
   CAFFEINE_KEYS: CAFFEINE_KEYS, ALCOHOL_KEYS: ALCOHOL_KEYS,
   hoursSinceLast: hoursSinceLast, timelineStage: timelineStage,
