@@ -253,7 +253,14 @@
     });
 
     /* ================= intake ================= */
-    group("intake");
+    group("intake events");
+    var T0 = Date.parse("2026-08-12T20:00:00");
+    function logAt(specs) {
+      var l = [];
+      specs.forEach(function (sp) { l = FT.addIntakeEvent(l, sp[0], T0 - sp[1] * 3600000, sp[2]).log; });
+      return l;
+    }
+
     check("black coffee does not break a fast; milk/sugar, alcohol and meat do", function () {
       if (FT.breaksFast("coffeeBlack") !== false) return "black coffee marked as breaking a fast";
       if (FT.breaksFast("coffeeMilk") !== true) return "coffee with milk marked as fasting-safe";
@@ -261,46 +268,117 @@
       if (FT.breaksFast("meat") !== true) return "meat marked as fasting-safe";
       return true;
     });
-    check("an unknown item is a no-op, not a crash", function () {
-      var r = FT.upsertIntake([], "2026-08-11", "kombucha", 3);
-      return r.changed === false && r.intake.length === 0 ? true : "unknown key was accepted";
+    check("an unknown item is rejected, not stored", function () {
+      var r = FT.addIntakeEvent([], "kombucha", T0);
+      return r.added === false && r.log.length === 0 ? true : "unknown key was accepted";
     });
-    check("one intake row per day, repeated writes replace", function () {
-      var ik = [];
-      ik = FT.upsertIntake(ik, "2026-08-11", "alcohol", 2).intake;
-      ik = FT.upsertIntake(ik, "2026-08-11", "coffeeBlack", 3).intake;
-      ik = FT.upsertIntake(ik, "2026-08-11", "alcohol", 1).intake;
-      if (ik.length !== 1) return "expected 1 row, got " + ik.length;
-      return ik[0].alcohol === 1 && ik[0].coffeeBlack === 3
-        ? true : "wrong values: " + JSON.stringify(ik[0]);
+    check("counts derive from the event log", function () {
+      var l = logAt([["coffeeBlack", 1], ["coffeeBlack", 6], ["alcohol", 0.5]]);
+      var c = FT.intakeOn(l, "2026-08-12");
+      return c.coffeeBlack === 2 && c.alcohol === 1
+        ? true : "wrong counts: " + JSON.stringify(c);
     });
-    check("counts never go negative", function () {
-      var ik = FT.upsertIntake([], "2026-08-11", "alcohol", -5).intake;
-      return eq(ik[0].alcohol, 0, "alcohol");
+    check("removing takes the most recent event of that item that day", function () {
+      var l = logAt([["coffeeBlack", 6], ["coffeeBlack", 1]]);
+      var r = FT.removeIntakeEvent(l, "coffeeBlack", "2026-08-12");
+      if (!r.removed) return "nothing was removed";
+      if (r.log.length !== 1) return "expected 1 left, got " + r.log.length;
+      // the 6h-old one must survive; the 1h-old one goes
+      return near((T0 - r.log[0].at) / 3600000, 6, 0.01, "surviving event age");
     });
-    check("does not mutate the array it was given", function () {
-      var ik = [{ date: "2026-08-11", coffeeBlack: 1, coffeeMilk: 0, alcohol: 0, meat: 0 }];
-      FT.upsertIntake(ik, "2026-08-11", "coffeeBlack", 9);
-      return eq(ik[0].coffeeBlack, 1, "original row");
+    check("removing from an empty day is a no-op, not a crash", function () {
+      var r = FT.removeIntakeEvent([], "alcohol", "2026-08-12");
+      return r.removed === false && r.log.length === 0 ? true : "unexpected mutation";
     });
-    check("intakeOn returns a zeroed row for a day with nothing logged", function () {
-      var r = FT.intakeOn([], "2026-08-11");
-      var allZero = FT.INTAKE_ITEMS.every(function (it) { return r[it.key] === 0; });
-      return allZero ? true : "got " + JSON.stringify(r);
+    check("counts can never go negative", function () {
+      var l = logAt([["alcohol", 1]]);
+      l = FT.removeIntakeEvent(l, "alcohol", "2026-08-12").log;
+      l = FT.removeIntakeEvent(l, "alcohol", "2026-08-12").log;
+      return eq(FT.intakeOn(l, "2026-08-12").alcohol, 0, "alcohol count");
     });
-    check("totals respect the date window", function () {
-      var ik = [];
-      ik = FT.upsertIntake(ik, "2026-08-01", "alcohol", 3).intake;
-      ik = FT.upsertIntake(ik, "2026-08-10", "alcohol", 2).intake;
-      var t = FT.intakeTotals(ik, "2026-08-05", "2026-08-31");
-      return eq(t.alcohol, 2, "windowed total");
+    check("does not mutate the log it was given", function () {
+      var l = logAt([["alcohol", 1]]);
+      var len = l.length;
+      FT.addIntakeEvent(l, "alcohol", T0);
+      FT.removeIntakeEvent(l, "alcohol", "2026-08-12");
+      return eq(l.length, len, "original log length");
+    });
+    check("events on another day do not leak into today's counts", function () {
+      var l = logAt([["alcohol", 30]]); // 30h ago = previous day
+      return eq(FT.intakeOn(l, "2026-08-12").alcohol, 0, "today's alcohol");
+    });
+    check("totals respect the date range", function () {
+      var l = logAt([["alcohol", 30], ["alcohol", 1]]);
+      return eq(FT.intakeTotals(l, "2026-08-12", "2026-08-12").alcohol, 1, "windowed total");
     });
     check("weekStart is Monday-based and stable across a week", function () {
-      // 2026-08-10 is a Monday
       if (FT.weekStart("2026-08-10") !== "2026-08-10") return "Monday did not map to itself";
       if (FT.weekStart("2026-08-16") !== "2026-08-10") return "Sunday mapped to the wrong week";
       if (FT.weekStart("2026-08-17") !== "2026-08-17") return "next Monday did not start a new week";
       return true;
+    });
+
+    group("caffeineNow");
+    check("no doses means zero, not NaN", function () {
+      var c = FT.caffeineNow([], T0);
+      return c.mg === 0 && c.clearAtMs === null ? true : "got " + JSON.stringify(c);
+    });
+    check("decays by half every half-life", function () {
+      // one 100mg cup exactly one half-life ago -> ~50mg
+      var l = logAt([["coffeeBlack", FT.CAFFEINE_HALF_LIFE_H]]);
+      return near(FT.caffeineNow(l, T0).mg, 50, 2, "mg after one half-life");
+    });
+    check("two doses sum, each decayed by its own age", function () {
+      var l = logAt([["coffeeBlack", 1], ["coffeeBlack", 6]]);
+      // 100*0.5^(1/5) + 100*0.5^(6/5) = 87.1 + 43.5
+      return near(FT.caffeineNow(l, T0).mg, 131, 3, "summed mg");
+    });
+    check("coffee with milk still contributes caffeine", function () {
+      var l = logAt([["coffeeMilk", 1]]);
+      return FT.caffeineNow(l, T0).mg > 50 ? true : "milk coffee contributed no caffeine";
+    });
+    check("meat contributes no caffeine", function () {
+      return eq(FT.caffeineNow(logAt([["meat", 1]]), T0).mg, 0, "mg");
+    });
+    check("a dose two days old has effectively cleared", function () {
+      return eq(FT.caffeineNow(logAt([["coffeeBlack", 48]]), T0).mg, 0, "mg");
+    });
+    check("backdated (approx) events are excluded from the live estimate", function () {
+      // a day-count import has no real time; claiming it is circulating now
+      // would be inventing data
+      var l = FT.addIntakeEvent([], "coffeeBlack", T0 - 3600000, true).log;
+      return eq(FT.caffeineNow(l, T0).mg, 0, "mg from an approx event");
+    });
+    check("reports when it drops below the sleep threshold, and it is in the future", function () {
+      var c = FT.caffeineNow(logAt([["coffeeBlack", 1]]), T0);
+      if (!c.clearAtMs) return "no threshold time reported";
+      return c.clearAtMs > T0 ? true : "threshold time is in the past";
+    });
+
+    group("alcoholNow");
+    check("no drinks means zero", function () {
+      var a = FT.alcoholNow([], T0);
+      return a.units === 0 && a.clearAtMs === null ? true : "got " + JSON.stringify(a);
+    });
+    check("clears at roughly one unit per hour, not by half-life", function () {
+      // one drink 30 minutes ago -> about half a unit left
+      return near(FT.alcoholNow(logAt([["alcohol", 0.5]]), T0).units, 0.5, 0.05, "units left");
+    });
+    check("a drink over an hour old has cleared", function () {
+      return eq(FT.alcoholNow(logAt([["alcohol", 2]]), T0).units, 0, "units");
+    });
+    check("consecutive drinks queue rather than clearing in parallel", function () {
+      // two drinks 30 and 10 minutes ago: the second cannot start clearing
+      // until the first is done, so ~1.5 units remain
+      var l = logAt([["alcohol", 0.5], ["alcohol", 1 / 6]]);
+      return near(FT.alcoholNow(l, T0).units, 1.5, 0.1, "queued units");
+    });
+    check("coffee contributes no alcohol", function () {
+      return eq(FT.alcoholNow(logAt([["coffeeBlack", 0.5]]), T0).units, 0, "units");
+    });
+    check("backdated events are excluded from the live estimate", function () {
+      var l = FT.addIntakeEvent([], "alcohol", T0 - 600000, true).log;
+      return eq(FT.alcoholNow(l, T0).units, 0, "units from an approx event");
     });
 
     group("intakeObservation");
@@ -318,7 +396,12 @@
     check("pairs each week's totals with that week's weight change", function () {
       var w = series(76, -0.13, 40);
       var ik = [];
-      w.forEach(function (x, i) { ik = FT.upsertIntake(ik, x.date, "alcohol", i < 7 ? 3 : 0).intake; });
+      w.forEach(function (x, i) {
+        if (i >= 7) return;
+        for (var q = 0; q < 3; q++) {
+          ik = FT.addIntakeEvent(ik, "alcohol", new Date(x.date + "T20:00:00").getTime() + q * 60000, true).log;
+        }
+      });
       var r = FT.intakeObservation(w, ik);
       if (r.status !== "ok") return "expected ok, got " + r.status + " (" + r.reason + ")";
       var firstWeek = r.all[0];
@@ -329,7 +412,9 @@
     check("never claims causation — no correlation coefficient is exposed", function () {
       var w = series(76, -0.13, 40);
       var ik = [];
-      w.forEach(function (x) { ik = FT.upsertIntake(ik, x.date, "alcohol", 2).intake; });
+      w.forEach(function (x) {
+        ik = FT.addIntakeEvent(ik, "alcohol", new Date(x.date + "T20:00:00").getTime(), true).log;
+      });
       var r = FT.intakeObservation(w, ik);
       var blob = JSON.stringify(r);
       return /\br\b\s*[:=]|correlat|causal|because/i.test(blob)
@@ -525,8 +610,7 @@
       return r.doc === null && r.error ? true : "expected a refusal";
     });
     check("a stored v2 doc UPGRADES in place, keeping its data", function () {
-      // v3 added intake purely additively; refusing a v2 doc would strand
-      // every weigh-in already on the phone
+      // refusing would strand every weigh-in already on the phone
       var v2 = JSON.stringify({
         schemaVersion: 2,
         weights: [{ date: "2026-08-01", kg: 76 }],
@@ -535,10 +619,29 @@
       });
       var r = FT.migrate(v2, null, null);
       if (!r.doc) return "v2 doc was refused: " + r.error;
-      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "schemaVersion not bumped";
+      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "schemaVersion not bumped to " + FT.SCHEMA_VERSION;
       if (r.doc.weights.length !== 1) return "weights lost in upgrade";
       if (r.doc.goals.length !== 1) return "goals lost in upgrade";
-      return Array.isArray(r.doc.intake) ? true : "intake array not added";
+      return Array.isArray(r.doc.intakeLog) ? true : "intakeLog not added";
+    });
+    check("a v3 doc's day counts become events, losing no counts", function () {
+      // v4 needs a time per dose for the live estimates; v3 had only counts,
+      // so they land at noon flagged approx rather than being discarded
+      var v3 = JSON.stringify({
+        schemaVersion: 3,
+        weights: [{ date: "2026-08-01", kg: 76 }], goals: [], measures: [], fastHistory: [],
+        intake: [{ date: "2026-08-01", coffeeBlack: 2, coffeeMilk: 0, alcohol: 1, meat: 1 }]
+      });
+      var r = FT.migrate(v3, null, null);
+      if (!r.doc) return "v3 doc was refused: " + r.error;
+      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "schemaVersion not bumped";
+      if (r.doc.weights.length !== 1) return "weights lost in upgrade";
+      var c = FT.intakeOn(r.doc.intakeLog, "2026-08-01");
+      if (c.coffeeBlack !== 2 || c.alcohol !== 1 || c.meat !== 1) {
+        return "counts changed in migration: " + JSON.stringify(c);
+      }
+      var allApprox = r.doc.intakeLog.every(function (e) { return e.approx === true; });
+      return allApprox ? true : "migrated events were not flagged approx";
     });
     check("a current-version doc round-trips unchanged", function () {
       var d = FT.emptyDoc();

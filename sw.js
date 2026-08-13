@@ -9,7 +9,7 @@
  */
 "use strict";
 
-var VERSION = "ft-2.2.0";
+var VERSION = "ft-2.3.0";
 var SHELL = [
   "./",
   "./index.html",
@@ -55,8 +55,19 @@ self.addEventListener("fetch", function (e) {
     );
     return;
   }
+  /* Bypass the browser HTTP cache for our own code and shell.
+   *
+   * A plain fetch() here can be satisfied from the HTTP cache, which means a
+   * deployed fix is invisible until that entry expires — the exact failure
+   * this network-first strategy exists to avoid. It bit during development:
+   * a stale app.js kept being served after the source had changed.
+   * Vercel also sends no-cache for these paths; this makes it not depend on
+   * the host getting that right. */
+  var isCode = /\.(?:js|html)$|\/$/.test(url.pathname);
+  var request = isCode ? new Request(req, { cache: "no-store" }) : req;
+
   e.respondWith(
-    fetch(req).then(function (res) {
+    fetch(request).then(function (res) {
       var copy = res.clone();
       caches.open(VERSION).then(function (c) { c.put(req, copy); });
       return res;

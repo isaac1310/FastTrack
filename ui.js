@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.2.0).
+/* FastTrack — UI layer (v2.3.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -61,7 +61,9 @@ function seedDemo(kind) {
     { date: "2026-08-04", waistCm: 96.2, thighCm: 57.5, onProtocol: true },
     { date: "2026-08-09", waistCm: 99.0, thighCm: 57.4, onProtocol: false }
   ];
-  // intake: a heavier week in the middle, so the comparison table has something in it
+  // intake: timestamped events. A heavier week in the middle so the weekly
+  // table has something in it, plus a few doses in the last couple of hours
+  // so the live body-status estimates are non-zero in the demo.
   var intakePattern = [
     [2,0,0,1],[3,1,0,1],[2,0,2,0],[2,0,0,1],[3,0,1,1],[2,1,3,2],[1,0,4,1],
     [2,0,0,1],[3,0,0,0],[2,1,1,1],[2,0,0,1],[3,0,2,1],[2,0,0,0],[2,0,1,1],
@@ -70,9 +72,23 @@ function seedDemo(kind) {
   for (var j = 0; j < 22; j++) {
     var idt = new Date(start); idt.setDate(idt.getDate() + j);
     var pat = intakePattern[j];
-    d.intake.push({ date: FT.todayISO(idt), coffeeBlack: pat[0], coffeeMilk: pat[1], alcohol: pat[2], meat: pat[3] });
+    var dayISO = FT.todayISO(idt);
+    var isToday = dayISO === FT.todayISO();
+    [["coffeeBlack", pat[0], 7], ["coffeeMilk", pat[1], 10], ["alcohol", pat[2], 20], ["meat", pat[3], 13]]
+      .forEach(function (spec) {
+        for (var q = 0; q < spec[1]; q++) {
+          var at = new Date(dayISO + "T12:00:00");
+          at.setHours(spec[2] + q, 15, 0, 0);
+          d.intakeLog.push({ at: at.getTime(), key: spec[0], approx: !isToday });
+        }
+      });
   }
   var now = Date.now();
+  // recent, real-timestamped doses so the live estimates render in the demo
+  d.intakeLog.push({ at: now - 70 * 60000, key: "coffeeBlack", approx: false });
+  d.intakeLog.push({ at: now - 5.5 * 3600000, key: "coffeeBlack", approx: false });
+  if (kind === "behind") d.intakeLog.push({ at: now - 40 * 60000, key: "alcohol", approx: false });
+  d.intakeLog.sort(function (a, b) { return a.at - b.at; });
   d.fastHistory = [
     { start: now - 4 * 86400000 - 17 * 3600000, end: now - 4 * 86400000, protocolHours: 16 },
     { start: now - 3 * 86400000 - 16.5 * 3600000, end: now - 3 * 86400000, protocolHours: 16 },
@@ -329,21 +345,71 @@ function fastingCard() {
 /* ============================================================ *
  *  Live status
  * ============================================================ */
+/* Live estimates of what is actually circulating right now. Rendered as
+   blocks inside the body-status card and refreshed by tick(). */
+function liveIntakeBlocks() {
+  var caf = FT.caffeineNow(doc.intakeLog);
+  var alc = FT.alcoholNow(doc.intakeLog);
+  var html = "";
+
+  if (alc.units > 0.05) {
+    html += '<div class="blk warn"><div class="k">אלכוהול בדם</div><div class="v">' +
+      'בערך <b class="n">' + alc.units.toFixed(1) + '</b> מנות עוד לא פונו. ' +
+      'עד שהן יפונו — בסביבות <b class="n">' + fmtClock(alc.clearAtMs) + '</b> — ' +
+      'חמצון השומן מדוכא: הגוף שורף את האלכוהול לפני השומן.</div></div>';
+  }
+
+  if (caf.mg > 0) {
+    var sleepy = caf.clearAtMs && caf.hoursToThreshold > 0;
+    html += '<div class="blk"><div class="k">קפאין בגוף</div><div class="v">' +
+      'בערך <b class="n">' + caf.mg + '</b> מ״ג פעילים' +
+      (sleepy
+        ? ', וירדו מתחת ל-<span class="n">' + FT.CAFFEINE_SLEEP_MG + '</span> מ״ג בסביבות <b class="n">' +
+          fmtClock(caf.clearAtMs) + '</b>. עד אז זה עלול לפגוע בשינה העמוקה גם אם נרדמים בקלות.'
+        : '.') +
+      '</div></div>';
+  }
+
+  return html;
+}
+
 function statusCard() {
-  if (!doc.session) return "";
-  var p = FT.getPhase(activeHours());
-  var blocks = [
-    ["מה קורה", p.now, "phNow"], ["דלק", p.fuel, "phFuel"],
-    ["הורמונים", p.hormones, "phHorm"], ["תחושה", p.feel, "phFeel"],
-    ["מה עוזר", p.helps, "phHelps"]
-  ];
+  var caf = FT.caffeineNow(doc.intakeLog);
+  var alc = FT.alcoholNow(doc.intakeLog);
+  var hasLive = caf.mg > 0 || alc.units > 0.05;
+
+  /* Shown when fasting OR when something is still circulating. Caffeine and
+     alcohol are in the body whether or not a timer is running, so gating this
+     card on the fast alone made it silent exactly when it had something to
+     say. */
+  if (!doc.session && !hasLive) return "";
+
   var html = '<div class="card"><div class="cardHead">' +
     '<div class="cardTitle">מה קורה עכשיו בגוף</div>' +
-    '<div class="hint">גבולות טיפוסיים, לא אישיים</div></div><div class="blocks">';
-  blocks.forEach(function (b) {
-    html += '<div class="blk"><div class="k">' + b[0] + '</div><div class="v" id="' + b[2] + '">' + esc(b[1]) + '</div></div>';
-  });
-  html += '</div><div id="phCaution">' + cautionHtml(p) + '</div></div>';
+    '<div class="hint">' + (doc.session ? "גבולות טיפוסיים, לא אישיים" : "הערכה") + '</div></div>';
+
+  html += '<div class="blocks" id="liveBlocks">' + liveIntakeBlocks() + '</div>';
+
+  if (doc.session) {
+    var p = FT.getPhase(activeHours());
+    var blocks = [
+      ["מה קורה", p.now, "phNow"], ["דלק", p.fuel, "phFuel"],
+      ["הורמונים", p.hormones, "phHorm"], ["תחושה", p.feel, "phFeel"],
+      ["מה עוזר", p.helps, "phHelps"]
+    ];
+    html += '<div class="blocks">';
+    blocks.forEach(function (b) {
+      html += '<div class="blk"><div class="k">' + b[0] + '</div><div class="v" id="' + b[2] + '">' + esc(b[1]) + '</div></div>';
+    });
+    html += '</div><div id="phCaution">' + cautionHtml(p) + '</div>';
+  }
+
+  if (hasLive) {
+    html += '<div class="note">הערכה מערכים טיפוסיים, לא מדידה: כוס קפה מחושבת כ-' +
+      n("100") + ' מ״ג ומנת אלכוהול כ-' + n("14") + ' גרם, וזמן מחצית החיים של קפאין כ-' +
+      n(FT.CAFFEINE_HALF_LIFE_H) + ' שעות. בפועל כל אחד מהמספרים האלה משתנה מאוד בין אנשים ובין כוסות.</div>';
+  }
+  html += '</div>';
   return html;
 }
 function cautionHtml(p) {
@@ -669,7 +735,7 @@ function logCard() {
 function intakeCard() {
   var date = view.intakeDate || FT.todayISO();
   var isToday = date === FT.todayISO();
-  var row = FT.intakeOn(doc.intake, date);
+  var row = FT.intakeOn(doc.intakeLog, date);
 
   var html = '<div class="card"><div class="cardHead" style="align-items:center">' +
     '<div class="cardTitle">צריכה</div>' +
@@ -694,7 +760,7 @@ function intakeCard() {
   });
   html += '</div>';
 
-  var t = FT.intakeTotals(doc.intake, FT.weekStart(FT.todayISO()), FT.todayISO());
+  var t = FT.intakeTotals(doc.intakeLog, FT.weekStart(FT.todayISO()), FT.todayISO());
   var parts = [];
   FT.INTAKE_ITEMS.forEach(function (it) {
     if (t[it.key] > 0) parts.push(esc(it.label) + " " + n(t[it.key]));
@@ -708,7 +774,7 @@ function intakeCard() {
    coefficient — with five weeks before Paris, n is far too small, and a
    confident-looking number would be worse than no number at all. */
 function intakeObservationCard() {
-  var obs = FT.intakeObservation(doc.weights, doc.intake);
+  var obs = FT.intakeObservation(doc.weights, doc.intakeLog);
   var html = '<div class="card"><div class="cardHead">' +
     '<div class="cardTitle">צריכה מול מגמה</div>' +
     '<div class="hint">שבוע מול שבוע</div></div>';
@@ -948,7 +1014,18 @@ function render() {
 
 /* Patches text and geometry only, by id. */
 function tick() {
-  if (!doc || !doc.session) return;
+  if (!doc) return;
+
+  /* Live intake estimates decay whether or not a fast is running, so they are
+     patched before the early return. innerHTML here is safe: the block holds
+     no inputs. */
+  var lb = document.getElementById("liveBlocks");
+  if (lb) {
+    var next = liveIntakeBlocks();
+    if (lb.innerHTML !== next) lb.innerHTML = next;
+  }
+
+  if (!doc.session) return;
   var h = activeHours();
   var phase = FT.getPhase(h);
   var idx = FT.phaseIndex(h);
@@ -1186,12 +1263,23 @@ function saveEditedWeight(origDate) {
 
 function bumpIntake(key, delta) {
   var date = view.intakeDate || FT.todayISO();
-  var cur = Math.max(0, Number(FT.intakeOn(doc.intake, date)[key]) || 0);
-  var next = Math.max(0, cur + delta);
-  if (next === cur) return;
+  var isToday = date === FT.todayISO();
 
-  var r = FT.upsertIntake(doc.intake, date, key, next);
-  doc.intake = r.intake;
+  if (delta > 0) {
+    /* The timestamp is recorded automatically — that is what makes the live
+       body status possible, and it costs no extra tap. A backdated entry has
+       no real time, so it lands at noon flagged approx and is excluded from
+       the live estimates while still counting toward totals. */
+    var at = isToday ? Date.now() : new Date(date + "T12:00:00").getTime();
+    var r = FT.addIntakeEvent(doc.intakeLog, key, at, !isToday);
+    if (!r.added) return;
+    doc.intakeLog = r.log;
+  } else {
+    var rem = FT.removeIntakeEvent(doc.intakeLog, key, date);
+    if (!rem.removed) return;
+    doc.intakeLog = rem.log;
+  }
+
   var ok = persist();
   render();
   if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
@@ -1200,10 +1288,9 @@ function bumpIntake(key, delta) {
      plain tea don't, and nagging every morning would train you to ignore it.
      Offered, never automatic: a mistap must not destroy a running timer, and
      you may be logging something from before the fast started. */
-  if (delta > 0 && doc.session && FT.breaksFast(key) && date === FT.todayISO()) {
+  if (delta > 0 && doc.session && FT.breaksFast(key) && isToday) {
     var item = FT.intakeItem(key);
-    var h = activeHours();
-    showToast(item.label + " בזמן צום של " + fmtHM(h) + " שעות — זה שובר את הצום.", {
+    showToast(item.label + " בזמן צום של " + fmtHM(activeHours()) + " שעות — זה שובר את הצום.", {
       label: "סיים צום",
       fn: function () { stopFast(); }
     });

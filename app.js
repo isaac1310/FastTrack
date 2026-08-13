@@ -4,9 +4,9 @@
  */
 "use strict";
 
-var APP_VERSION = "2.2.0";
+var APP_VERSION = "2.3.0";
 var LS_KEY = "fasttrack.doc";
-var SCHEMA_VERSION = 3;
+var SCHEMA_VERSION = 4;
 
 /* ============================================================ *
  *  Fasting phases
@@ -97,7 +97,7 @@ var REFEED_NOTE = "אחרי צום ארוך: לשבור בקטן. משהו קל 
  * ============================================================ */
 var INTAKE_ITEMS = [
   {
-    key: "coffeeBlack", label: "קפה שחור", unit: "כוסות", breaksFast: false,
+    key: "coffeeBlack", label: "קפה שחור", unit: "כוסות", breaksFast: false, caffeineMg: 100,
     now: "קפאין חוסם קולטני אדנוזין — לא מוסיף אנרגיה, רק מסתיר את תחושת העייפות עד שהוא מתפוגג.",
     fasting: "כוס קפה שחור היא בערך 2 קלוריות. היא לא שוברת צום, וגם תה ירוק או שחור בלי סוכר וחלב לא.",
     effect: "מעלה קלות את קצב חילוף החומרים וחמצון השומן לטווח קצר. ההשפעה אמיתית אבל צנועה, ונחלשת עם סבילות.",
@@ -105,7 +105,7 @@ var INTAKE_ITEMS = [
     caution: null
   },
   {
-    key: "coffeeMilk", label: "קפה עם חלב/סוכר", unit: "כוסות", breaksFast: true,
+    key: "coffeeMilk", label: "קפה עם חלב/סוכר", unit: "כוסות", breaksFast: true, caffeineMg: 100,
     now: "מה שמוסיפים לקפה הוא מה שקובע. חלב וסוכר מכניסים קלוריות ומעלים אינסולין.",
     fasting: "שובר את הצום. הקפה עצמו לא הבעיה — התוספת כן.",
     effect: "קפה הפוך גדול יכול להיות ארוחה קטנה מבחינת קלוריות, בלי תחושת השובע של ארוחה.",
@@ -113,7 +113,7 @@ var INTAKE_ITEMS = [
     caution: null
   },
   {
-    key: "alcohol", label: "אלכוהול", unit: "מנות", breaksFast: true,
+    key: "alcohol", label: "אלכוהול", unit: "מנות", breaksFast: true, alcoholUnits: 1,
     now: "הגוף מתייחס לאלכוהול כאל רעל ונותן לפינוי שלו עדיפות על כל דלק אחר.",
     fasting: "שובר את הצום.",
     effect: "כל עוד יש אלכוהול בדם, חמצון השומן מדוכא — הגוף שורף את האלכוהול במקום את השומן. זו ההשפעה הישירה ביותר מבין השלושה על ירידה במשקל. בנוסף: 7 קלוריות לגרם, כמעט בלי ערך תזונתי, והוא מגביר תיאבון ומחליש שליטה על אכילה.",
@@ -175,7 +175,7 @@ function emptyDoc() {
     goals: [],
     weights: [],
     measures: [],
-    intake: [],
+    intakeLog: [],
     reminders: { weighIn: "08:00", measureWeekday: 0, enabled: false, permission: "default" },
     session: null,
     fastHistory: [],
@@ -202,13 +202,35 @@ function migrate(raw, v1entries, v1session) {
     if (parsed && parsed.schemaVersion === SCHEMA_VERSION) {
       return { doc: normalizeDoc(parsed), migrated: false };
     }
-    /* v2 → v3: intake tracking added. Purely additive — every v2 field keeps
-       its meaning, so this upgrades in place rather than refusing. Anything
-       older than v2 that still has a schemaVersion is not something we ever
-       wrote, so it falls through to the refusal below. */
-    if (parsed && parsed.schemaVersion === 2) {
-      parsed.schemaVersion = SCHEMA_VERSION;
-      if (!Array.isArray(parsed.intake)) parsed.intake = [];
+    /* v2 → v3 → v4, upgraded in place. Refusing would strand every weigh-in
+       already on the phone, and each step is information-preserving. */
+    if (parsed && (parsed.schemaVersion === 2 || parsed.schemaVersion === 3)) {
+      if (parsed.schemaVersion === 2) {
+        parsed.intake = Array.isArray(parsed.intake) ? parsed.intake : [];
+        parsed.schemaVersion = 3;
+      }
+      if (parsed.schemaVersion === 3) {
+        /* v3 stored day counts; v4 stores timestamped events so the live body
+           status can decay a dose. Old counts have no time, so they land at
+           noon flagged approx: they still count toward daily and weekly
+           totals but are excluded from "how much is in you now", which is
+           meaningless for a past day anyway. Nothing is dropped. */
+        var log = Array.isArray(parsed.intakeLog) ? parsed.intakeLog : [];
+        (Array.isArray(parsed.intake) ? parsed.intake : []).forEach(function (row) {
+          if (!row || !row.date) return;
+          var noon = new Date(row.date + "T12:00:00").getTime();
+          INTAKE_ITEMS.forEach(function (it) {
+            var c = Math.max(0, Math.round(Number(row[it.key]) || 0));
+            for (var i = 0; i < c; i++) {
+              log.push({ at: noon + i * 60000, key: it.key, approx: true });
+            }
+          });
+        });
+        log.sort(function (a, b) { return a.at - b.at; });
+        parsed.intakeLog = log;
+        delete parsed.intake;
+        parsed.schemaVersion = 4;
+      }
       return { doc: normalizeDoc(parsed), migrated: true };
     }
     if (parsed && typeof parsed.schemaVersion === "number" && parsed.schemaVersion > SCHEMA_VERSION) {
@@ -263,7 +285,7 @@ function normalizeDoc(d) {
   d.goals = Array.isArray(d.goals) ? d.goals : [];
   d.weights = Array.isArray(d.weights) ? d.weights : [];
   d.measures = Array.isArray(d.measures) ? d.measures : [];
-  d.intake = Array.isArray(d.intake) ? d.intake : [];
+  d.intakeLog = Array.isArray(d.intakeLog) ? d.intakeLog : [];
   d.fastHistory = Array.isArray(d.fastHistory) ? d.fastHistory : [];
   if (d.session && !isFinite(d.session.start)) d.session = null;
   return d;
@@ -514,44 +536,140 @@ function moveWeight(weights, fromDate, toDate, kg) {
 
 function isFutureDate(dateStr, todayStr) { return dateStr > (todayStr || todayISO()); }
 
-/* ---- intake ----
- * One row per day holding a count per item. Returns a NEW array. */
-function emptyIntakeDay(date) {
-  var row = { date: date };
-  INTAKE_ITEMS.forEach(function (it) { row[it.key] = 0; });
-  return row;
-}
+/* ============================================================ *
+ *  Intake events + live body estimates
+ *
+ *  Intake is stored as a timestamped EVENT LOG, not day counts. Counts are
+ *  derived. The reason is the live status card: without a time per cup there
+ *  is no way to say how much caffeine is still circulating, and a status card
+ *  that ignores the coffee you drank an hour ago is not a status card.
+ *
+ *  Tapping + records the time automatically, so this costs no extra taps.
+ *  Backdated entries get noon and are marked approx — they still count toward
+ *  daily and weekly totals, but they are excluded from the live estimates,
+ *  because "how much is in you now" is meaningless for a past day.
+ * ============================================================ */
 
-function upsertIntake(intake, date, key, count) {
-  var it = intakeItem(key);
-  if (!it) return { intake: (intake || []).slice(), changed: false };
-  var c = Math.max(0, Math.round(Number(count) || 0));
-  var list = (intake || []).filter(function (r) { return r && r.date; }).map(function (r) {
-    return Object.assign({}, r);
+var CAFFEINE_HALF_LIFE_H = 5;   // typical; real range ~3-7h between people
+var CAFFEINE_SLEEP_MG = 30;     // rough threshold where a dose stops mattering for sleep
+var ALCOHOL_CLEAR_PER_H = 1;    // standard drinks cleared per hour, approx
+
+function intakeEvents(log, fromMs, toMs) {
+  return (log || []).filter(function (e) {
+    if (!e || !isFinite(e.at) || !intakeItem(e.key)) return false;
+    if (isFinite(fromMs) && e.at < fromMs) return false;
+    if (isFinite(toMs) && e.at > toMs) return false;
+    return true;
   });
-  var row = list.filter(function (r) { return r.date === date; })[0];
-  if (!row) { row = emptyIntakeDay(date); list.push(row); }
-  var before = row[key] || 0;
-  row[key] = c;
-  list.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-  return { intake: list, changed: before !== c, before: before };
 }
 
-function intakeOn(intake, date) {
-  var row = (intake || []).filter(function (r) { return r && r.date === date; })[0];
-  return row || emptyIntakeDay(date);
+function dayBounds(dateISO) {
+  var a = new Date(dateISO + "T00:00:00");
+  var b = new Date(dateISO + "T00:00:00");
+  b.setDate(b.getDate() + 1);
+  return { from: a.getTime(), to: b.getTime() - 1 };
 }
 
-function intakeTotals(intake, fromDate, toDate) {
-  var t = {};
-  INTAKE_ITEMS.forEach(function (it) { t[it.key] = 0; });
-  (intake || []).forEach(function (r) {
-    if (!r || !r.date) return;
-    if (fromDate && r.date < fromDate) return;
-    if (toDate && r.date > toDate) return;
-    INTAKE_ITEMS.forEach(function (it) { t[it.key] += Math.max(0, Number(r[it.key]) || 0); });
+function addIntakeEvent(log, key, atMs, approx) {
+  if (!intakeItem(key)) return { log: (log || []).slice(), added: false };
+  var next = (log || []).slice();
+  next.push({ at: atMs, key: key, approx: !!approx });
+  next.sort(function (a, b) { return a.at - b.at; });
+  return { log: next, added: true };
+}
+
+/* Removes the most recent event of that item on that day — the natural
+ * inverse of tapping +. */
+function removeIntakeEvent(log, key, dateISO) {
+  var b = dayBounds(dateISO);
+  var idx = -1;
+  (log || []).forEach(function (e, i) {
+    if (e && e.key === key && e.at >= b.from && e.at <= b.to) {
+      if (idx === -1 || e.at > log[idx].at) idx = i;
+    }
   });
-  return t;
+  if (idx === -1) return { log: (log || []).slice(), removed: false };
+  var next = (log || []).slice();
+  next.splice(idx, 1);
+  return { log: next, removed: true };
+}
+
+function intakeCountsOn(log, dateISO) {
+  var b = dayBounds(dateISO);
+  var out = {};
+  INTAKE_ITEMS.forEach(function (it) { out[it.key] = 0; });
+  intakeEvents(log, b.from, b.to).forEach(function (e) { out[e.key] = (out[e.key] || 0) + 1; });
+  return out;
+}
+
+function intakeCountsBetween(log, fromISO, toISO) {
+  var from = dayBounds(fromISO).from, to = dayBounds(toISO).to;
+  var out = {};
+  INTAKE_ITEMS.forEach(function (it) { out[it.key] = 0; });
+  intakeEvents(log, from, to).forEach(function (e) { out[e.key] = (out[e.key] || 0) + 1; });
+  return out;
+}
+
+/* Caffeine still in the body, by first-order decay from each dose.
+ *
+ * This is an ESTIMATE built from typical values, not a measurement: a cup is
+ * assumed to be ~100mg (real cups range roughly 60-200mg) and the half-life
+ * ~5h (real range ~3-7h, and longer on some medications, shorter in smokers).
+ * The UI must present it as an estimate. */
+function caffeineNow(log, nowMs) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  var mg = 0, lastDose = null;
+  intakeEvents(log, now - 48 * 3600000, now).forEach(function (e) {
+    if (e.approx) return;
+    var it = intakeItem(e.key);
+    if (!it || !it.caffeineMg) return;
+    var hours = (now - e.at) / 3600000;
+    if (hours < 0) return;
+    mg += it.caffeineMg * Math.pow(0.5, hours / CAFFEINE_HALF_LIFE_H);
+    if (lastDose === null || e.at > lastDose) lastDose = e.at;
+  });
+  if (mg < 1) return { mg: 0, lastDoseAt: lastDose, clearAtMs: null };
+
+  // when the current amount decays below the sleep-relevant threshold
+  var hoursToThreshold = mg > CAFFEINE_SLEEP_MG
+    ? Math.log(mg / CAFFEINE_SLEEP_MG) / Math.log(2) * CAFFEINE_HALF_LIFE_H
+    : 0;
+  return {
+    mg: Math.round(mg),
+    lastDoseAt: lastDose,
+    clearAtMs: now + hoursToThreshold * 3600000,
+    hoursToThreshold: +hoursToThreshold.toFixed(2)
+  };
+}
+
+/* Standard drinks still to clear, at roughly one per hour.
+ * Zero-order elimination, which is how ethanol actually clears — unlike
+ * caffeine it is not a half-life curve. */
+function alcoholNow(log, nowMs) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  var events = intakeEvents(log, now - 24 * 3600000, now).filter(function (e) {
+    return !e.approx && intakeItem(e.key) && intakeItem(e.key).alcoholUnits;
+  }).sort(function (a, b) { return a.at - b.at; });
+  if (!events.length) return { units: 0, clearAtMs: null };
+
+  // drinks queue: each is cleared in turn at ALCOHOL_CLEAR_PER_H
+  var clearedUntil = events[0].at;
+  events.forEach(function (e) {
+    var start = Math.max(clearedUntil, e.at);
+    clearedUntil = start + (intakeItem(e.key).alcoholUnits / ALCOHOL_CLEAR_PER_H) * 3600000;
+  });
+  if (clearedUntil <= now) return { units: 0, clearAtMs: null };
+  var units = (clearedUntil - now) / 3600000 * ALCOHOL_CLEAR_PER_H;
+  return { units: +units.toFixed(2), clearAtMs: clearedUntil };
+}
+
+/* Counts for one day, derived from the event log. */
+function intakeOn(log, dateISO) { return intakeCountsOn(log, dateISO); }
+
+/* Counts across an inclusive date range, derived from the event log. */
+function intakeTotals(log, fromISO, toISO) {
+  var today = todayISO();
+  return intakeCountsBetween(log, fromISO || "1970-01-01", toISO || today);
 }
 
 /* Monday-based week key, so a week is a week regardless of locale. */
@@ -717,9 +835,13 @@ window.FT = {
   trendFit: trendFit, loadDoc: loadDoc, saveDoc: saveDoc,
   upsertWeight: upsertWeight, moveWeight: moveWeight, isFutureDate: isFutureDate,
   INTAKE_ITEMS: INTAKE_ITEMS, intakeItem: intakeItem, breaksFast: breaksFast,
-  upsertIntake: upsertIntake, intakeOn: intakeOn, intakeTotals: intakeTotals,
+  addIntakeEvent: addIntakeEvent, removeIntakeEvent: removeIntakeEvent,
+  intakeEvents: intakeEvents, dayBounds: dayBounds,
+  caffeineNow: caffeineNow, alcoholNow: alcoholNow,
+  CAFFEINE_HALF_LIFE_H: CAFFEINE_HALF_LIFE_H, CAFFEINE_SLEEP_MG: CAFFEINE_SLEEP_MG,
+  intakeOn: intakeOn, intakeTotals: intakeTotals,
   intakeByWeek: intakeByWeek, intakeObservation: intakeObservation,
-  weekStart: weekStart, emptyIntakeDay: emptyIntakeDay,
+  weekStart: weekStart,
   getPhase: getPhase, phaseIndex: phaseIndex, timeToNextPhase: timeToNextPhase,
   fastStats: fastStats, migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
   daysBetween: daysBetween, todayISO: todayISO, bmi: bmi, fmtDur: fmtDur,
