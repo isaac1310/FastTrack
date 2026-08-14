@@ -28,7 +28,7 @@ var view = {
   route: null,
   dayDate: null,
   picking: null,
-  folds: {},        // which tag is waiting for a meal to be tapped
+  folds: { goals: true },        // which tag is waiting for a meal to be tapped
   slotDrafts: null,     // {date, text:{slotKey:string}} — see restoreFocus()
   draft: null,
   baselineLog: null,
@@ -1587,10 +1587,13 @@ function render() {
                             fold("intake", "צריכה", intakeCard() + intakeObservationCard()) +
                             fold("guide", "מדריך השלבים", phaseGuideCard()); break;
     case "intake":   go("fasting"); body = ""; break;
-    case "tracking": body = chartCard() + paceCard() +
+    /* The expanded goal (pace, projection, verdict) lives inside יעדים rather
+       than floating above it — one place for goals, not two. The trend chart
+       stays first because that is what the screen is for. */
+    case "tracking": body = chartCard() +
+                            fold("goals", "יעדים", paceCard() + goalsCard()) +
                             fold("stats", "מדידות ומגמות", tilesCard()) +
                             fold("log", "רישום ומדידות", logCard()) +
-                            fold("goals", "יעדים", goalsCard()) +
                             fold("hist", "היסטוריית צומות", historyCard()); break;
     case "settings": body = settingsCard(); break;
     default:         body = homeScreen(); break;
