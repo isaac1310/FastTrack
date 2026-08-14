@@ -1078,6 +1078,113 @@
       return eq(returned, false, "return value");
     });
 
+    /* ================= days ================= */
+    group("day model");
+    function mkDay(spec) {
+      var days = {};
+      Object.keys(spec).forEach(function (slot) {
+        (spec[slot] || []).forEach(function (t) { days = FT.setDayTag(days, "2026-08-14", slot, t); });
+      });
+      return FT.dayDoc(days, "2026-08-14");
+    }
+    check("dayDoc returns a full day for a date that has none", function () {
+      var d = FT.dayDoc({}, "2026-08-14");
+      if (FT.SLOT_KEYS.length !== 6) return "expected 6 slots, got " + FT.SLOT_KEYS.length;
+      return FT.SLOT_KEYS.every(function (k) {
+        return d.slots[k] && d.slots[k].text === "" && d.slots[k].tags.length === 0;
+      }) ? true : "slots not zeroed";
+    });
+    check("dayDoc repairs a partial or hand-edited shape", function () {
+      var d = FT.dayDoc({ "2026-08-14": { slots: { lunch: { text: 5, tags: "nope" } } } }, "2026-08-14");
+      return d.slots.lunch.text === "" && d.slots.lunch.tags.length === 0
+        ? true : "bad shape survived: " + JSON.stringify(d.slots.lunch);
+    });
+    check("unknown tags are dropped, not stored", function () {
+      var d = FT.dayDoc({ "2026-08-14": { slots: { lunch: { text: "", tags: ["carb", "pizza"] } } } }, "2026-08-14");
+      return eq(d.slots.lunch.tags.join(","), "carb", "tags");
+    });
+    check("one carb does not flag", function () {
+      var f = FT.dayFlags(mkDay({ lunch: ["carb"] }));
+      return f.carbCount === 1 && f.overCarb === false ? true : JSON.stringify(f);
+    });
+    check("a SECOND carb flags — the state a checkbox could never reach", function () {
+      var f = FT.dayFlags(mkDay({ lunch: ["carb"], dinner: ["carb"] }));
+      return f.carbCount === 2 && f.overCarb === true ? true : JSON.stringify(f);
+    });
+    check("a second happy moment flags", function () {
+      var f = FT.dayFlags(mkDay({ mid1: ["happy"], mid2: ["happy"] }));
+      return f.happyCount === 2 && f.overHappy === true ? true : JSON.stringify(f);
+    });
+    check("a craving stands the carb flag down", function () {
+      var f = FT.dayFlags(mkDay({ lunch: ["carb"], dinner: ["carb"], late: ["craving"] }));
+      if (!f.standDown) return "standDown not set";
+      if (f.carbCount !== 2) return "count changed: " + f.carbCount;
+      return f.overCarb === false ? true : "flag still raised on a craving day";
+    });
+    check("setDayTag is idempotent on the same slot", function () {
+      var days = FT.setDayTag(FT.setDayTag({}, "2026-08-14", "lunch", "carb"), "2026-08-14", "lunch", "carb");
+      return eq(FT.dayFlags(FT.dayDoc(days, "2026-08-14")).carbCount, 1, "count");
+    });
+    check("clearDayTag removes only that tag on that slot", function () {
+      var days = FT.setDayTag({}, "2026-08-14", "lunch", "carb");
+      days = FT.setDayTag(days, "2026-08-14", "lunch", "happy");
+      days = FT.clearDayTag(days, "2026-08-14", "lunch", "carb");
+      return eq(FT.dayDoc(days, "2026-08-14").slots.lunch.tags.join(","), "happy", "remaining");
+    });
+    check("an unknown slot key is a no-op, not a crash", function () {
+      var days = FT.setDayTag({}, "2026-08-14", "brunch", "carb");
+      return eq(Object.keys(days).length, 0, "days written");
+    });
+    check("dayRange reaches BACKWARDS — the design ran forward only", function () {
+      var r = FT.dayRange("2026-08-14", 3, 3);
+      if (r.length !== 7) return "expected 7, got " + r.length;
+      if (r[0] !== "2026-08-11") return "first is " + r[0] + ", expected 3 days back";
+      return eq(r[6], "2026-08-17", "last");
+    });
+    check("weekDays is today plus six ahead", function () {
+      var w = FT.weekDays("2026-08-14", 7);
+      return w.length === 7 && w[0] === "2026-08-14" && w[6] === "2026-08-20"
+        ? true : w.join(",");
+    });
+    check("dayIsEmpty is false once anything is set", function () {
+      if (!FT.dayIsEmpty(FT.dayDoc({}, "2026-08-14"))) return "empty day reported non-empty";
+      return FT.dayIsEmpty(mkDay({ lunch: ["carb"] })) ? "tagged day reported empty" : true;
+    });
+
+    group("v6 migration");
+    check("a v5 doc gains days and keeps everything else", function () {
+      var v5 = JSON.stringify({
+        schemaVersion: 5, weights: [{ date: "2026-08-01", kg: 76 }], goals: [],
+        measures: [], fastHistory: [], intakeLog: [{ at: 1, key: "meat", approx: true }]
+      });
+      var r = FT.migrate(v5, null, null);
+      if (!r.doc) return "v5 refused: " + r.error;
+      if (r.doc.schemaVersion !== FT.SCHEMA_VERSION) return "not bumped to " + FT.SCHEMA_VERSION;
+      if (r.doc.weights.length !== 1) return "weights lost";
+      return r.doc.days && typeof r.doc.days === "object" ? true : "days not added";
+    });
+    check("intakeLog is STILL an event array after migrating", function () {
+      // the design proposed day counts; that model must not creep back in,
+      // because it would silently kill every since-last and decay figure
+      var v5 = JSON.stringify({
+        schemaVersion: 5, weights: [], goals: [], measures: [], fastHistory: [],
+        intakeLog: [{ at: 1000, key: "coffeeBlack", approx: false }]
+      });
+      var r = FT.migrate(v5, null, null);
+      if (!Array.isArray(r.doc.intakeLog)) return "intakeLog is not an array";
+      return typeof r.doc.intakeLog[0].at === "number"
+        ? true : "events lost their timestamps";
+    });
+    check("a v2 document still walks all the way to v6", function () {
+      var v2 = JSON.stringify({
+        schemaVersion: 2, weights: [{ date: "2026-08-01", kg: 76 }],
+        goals: [], measures: [], fastHistory: []
+      });
+      var r = FT.migrate(v2, null, null);
+      return r.doc && r.doc.schemaVersion === FT.SCHEMA_VERSION
+        ? true : "stopped at v" + (r.doc && r.doc.schemaVersion);
+    });
+
     /* ================= DOM guards ================= */
     group("DOM");
     var inApp = !!document.getElementById("app") && !!document.querySelector(".wrap");
@@ -1090,8 +1197,11 @@
     });
     check("heading font resolves to Rubik, not a Times fallback", function () {
       if (!inApp) return skip("not running inside the app page");
-      var el = document.querySelector(".cardTitle") || document.querySelector(".name");
-      if (!el) return skip("no heading rendered yet");
+      /* Must find a heading on EVERY route. Narrow selectors turn this into a
+         permanent skip, which is how a font regression ships unnoticed. */
+      var el = document.querySelector(".brand") || document.querySelector(".screenTitle") ||
+               document.querySelector(".cardTitle") || document.querySelector(".tileLabel");
+      if (!el) return "no heading found on route '" + (view && view.route) + "' — the check has stopped exercising anything";
       var ff = getComputedStyle(el).fontFamily;
       if (!/Rubik/i.test(ff)) return "font-family is '" + ff + "' — the stack collapsed";
       if (!document.fonts.check("16px Rubik", "מדריך")) return "Rubik is loaded but has no Hebrew coverage";
@@ -1117,6 +1227,73 @@
         }
       }
       return true;
+    });
+    check("routing: an unknown hash falls back to home, never a blank screen", function () {
+      if (!inApp) return skip("not running inside the app page");
+      var before = location.hash;
+      location.hash = "#/kombucha";
+      var r = (typeof parseHash === "function") ? parseHash() : null;
+      location.hash = before;
+      if (!r) return skip("parseHash not exposed on this page");
+      return eq(r.name, "home", "fallback route");
+    });
+    check("day-screen text survives a render — focus AND caret", function () {
+      // render() rebuilds innerHTML; six text inputs made this the highest
+      // risk in v3. It is the v1 date-picker bug, but constant.
+      if (!inApp) return skip("not running inside the app page");
+      if (typeof render !== "function" || typeof go !== "function") {
+        return skip("render/go not exposed on this page");
+      }
+      var before = location.hash;
+      location.hash = "#/day"; render();
+      var el = document.getElementById("slot_dinner");
+      if (!el) { location.hash = before; render(); return skip("day screen did not render a dinner slot"); }
+      el.focus(); el.value = "בדיקה"; el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.setSelectionRange(3, 3);
+      render();
+      var a = document.activeElement;
+      var okId = a && a.id === "slot_dinner";
+      var okCaret = okId && a.selectionStart === 3;
+      var okVal = okId && a.value === "בדיקה";
+      location.hash = before; render();
+      if (!okId) return "focus was lost across render()";
+      if (!okCaret) return "caret moved across render()";
+      return okVal ? true : "the draft text was lost across render()";
+    });
+    check("every theme token pair meets 4.5:1, computed not judged", function () {
+      if (!inApp) return skip("not running inside the app page");
+      var cs = getComputedStyle(document.documentElement);
+      function rgb(v) {
+        v = (v || "").trim();
+        if (v.charAt(0) === "#") {
+          return [parseInt(v.substr(1, 2), 16), parseInt(v.substr(3, 2), 16), parseInt(v.substr(5, 2), 16)];
+        }
+        var m = v.match(/\d+/g);
+        return m ? [+m[0], +m[1], +m[2]] : null;
+      }
+      function lum(c) {
+        var a = c.map(function (v) {
+          v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+      }
+      function ratio(f, b) {
+        var A = rgb(cs.getPropertyValue(f)), B = rgb(cs.getPropertyValue(b));
+        if (!A || !B) return null;
+        var l1 = lum(A), l2 = lum(B);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      }
+      var grounds = ["--surface", "--surface2", "--page"];
+      var inks = ["--text", "--muted", "--dim", "--head", "--link", "--flag", "--accent"];
+      var bad = [];
+      inks.forEach(function (i) {
+        grounds.forEach(function (g) {
+          var r = ratio(i, g);
+          if (r !== null && r < 4.5) bad.push(i + " on " + g + " = " + r.toFixed(2));
+        });
+      });
+      var theme = document.documentElement.getAttribute("data-theme") || "auto";
+      return bad.length ? theme + " theme fails: " + bad.join("; ") : true;
     });
     check("phone-width layout is single column", function () {
       if (!inApp) return skip("not running inside the app page");

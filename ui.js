@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v2.8.0).
+/* FastTrack — UI layer (v3.0.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -25,6 +25,10 @@ var view = {
   editingWeightDate: null,
   showAllWeights: false,
   intakeDate: null,
+  route: null,
+  dayDate: null,
+  picking: null,        // which tag is waiting for a meal to be tapped
+  slotDrafts: null,     // {date, text:{slotKey:string}} — see restoreFocus()
   draft: null,
   baselineLog: null,
   showBackdate: false,
@@ -105,8 +109,41 @@ function seedDemo(kind) {
   if (kind !== "idle" && kind !== "behind") {
     d.session = { start: now - 14.4 * 3600000, protocolHours: 18 };
   }
+  // day notes for the new screens
+  var t0 = FT.todayISO();
+  d.days = FT.setSlotText({}, t0, "morning", "יוגורט + אגוזים");
+  d.days = FT.setSlotText(d.days, t0, "lunch", "עוף וסלט, אורז");
+  d.days = FT.setDayTag(d.days, t0, "lunch", "carb");
+  d.days = FT.setSlotText(d.days, t0, "mid2", "גלידה קטנה");
+  d.days = FT.setDayTag(d.days, t0, "mid2", "happy");
+  d.days = FT.setTraining(d.days, t0, true);
+  var t1 = FT.todayISO(new Date(Date.now() + 86400000));
+  d.days = FT.setSlotText(d.days, t1, "dinner", "תכנון: דגים וירקות");
   d.lastExportAt = kind === "behind" ? null : new Date(now - 2 * 86400000).toISOString();
   return d;
+}
+
+/* ============================================================ *
+ *  Routing — hash based, because the standalone build must work from file://
+ * ============================================================ */
+var ROUTES = ["home", "day", "week", "fasting", "tracking", "intake", "settings"];
+
+function parseHash() {
+  var raw = (location.hash || "").replace(/^#\/?/, "");
+  var parts = raw.split("/").filter(Boolean);
+  var name = parts[0] || "home";
+  if (ROUTES.indexOf(name) === -1) name = "home";   // never a blank screen
+  return { name: name, arg: parts[1] || null };
+}
+
+function go(route, arg) {
+  location.hash = "#/" + route + (arg ? "/" + arg : "");
+}
+
+function currentDayDate() {
+  var r = parseHash();
+  if (r.name === "day" && /^\d{4}-\d{2}-\d{2}$/.test(r.arg || "")) return r.arg;
+  return view.dayDate || FT.todayISO();
 }
 
 /* ---------- boot ---------- */
@@ -129,6 +166,12 @@ function boot() {
   /* Snapshot of the log at open, so today's edits can be cancelled back to
      a known state — the same courtesy the past-day draft gets. */
   if (doc) view.baselineLog = doc.intakeLog.slice();
+  applyTheme();
+  if (!location.hash) location.hash = "#/home";
+  window.addEventListener("hashchange", function () {
+    view.picking = null;
+    render();
+  });
   render();
   setInterval(tick, 1000);
   registerSW();
@@ -182,6 +225,49 @@ function scheduleReminders() {
   });
 }
 function persist() { if (doc && !demoParam()) return saveDoc(doc); return true; }
+
+/* "auto" leaves the attribute off so the prefers-color-scheme block wins.
+   Setting data-theme explicitly must override it in both directions. */
+function applyTheme() {
+  var t = (doc && doc.profile && doc.profile.theme) || "dark";
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+}
+
+/* ============================================================ *
+ *  Focus preservation
+ *
+ *  render() rebuilds innerHTML. The day screen holds six free-text inputs, so
+ *  any state change while typing — a tag, a checkbox, the timer crossing a
+ *  phase — would destroy the focused field and lose the caret. That is the v1
+ *  date-picker bug, except constant instead of occasional.
+ *
+ *  Text goes to a draft in view state on `input`, never straight to the doc,
+ *  and the active element's id plus its selection are restored after the
+ *  rebuild. Verified by a selftest check, because it is invisible on a mockup.
+ * ============================================================ */
+function captureFocus() {
+  var el = document.activeElement;
+  if (!el || !el.id) return null;
+  var isText = el.tagName === "INPUT" || el.tagName === "TEXTAREA";
+  var snap = { id: el.id, start: null, end: null };
+  if (isText) {
+    try { snap.start = el.selectionStart; snap.end = el.selectionEnd; } catch (e) {}
+  }
+  return snap;
+}
+
+function restoreFocus(snap) {
+  if (!snap) return;
+  var el = document.getElementById(snap.id);
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+    if (snap.start !== null && el.setSelectionRange) {
+      el.setSelectionRange(snap.start, snap.end);
+    }
+  } catch (e) { /* a non-focusable element is not worth throwing over */ }
+}
 
 /* ---------- helpers ---------- */
 function esc(s) {
@@ -246,8 +332,24 @@ function renderToast() {
 }
 
 /* ============================================================ *
- *  Header
+ *  Top bar — brand home, live fasting pill, back-home pill
  * ============================================================ */
+function topBar(route) {
+  var html = '<div class="topBar full">' +
+    '<button class="brand" data-goto="home">FastTrack</button>' +
+    '<span class="topRight">';
+  if (doc.session) {
+    html += '<button class="fastPill" data-goto="fasting"><span class="dot"></span>' +
+      '<span class="n" id="topElapsed">' + fmtHM(activeHours()) + '</span></button>';
+  }
+  if (route !== "home") {
+    html += '<button class="homePill" data-goto="home">בית</button>';
+  }
+  html += '</span></div>';
+  return html;
+}
+
+/* legacy header, no longer rendered — kept out of the bundle by not calling it */
 function header() {
   var now = new Date();
   var dateTxt = WEEKDAYS[now.getDay()] + " · " + n(now.getDate() + "." + (now.getMonth() + 1));
@@ -1024,6 +1126,247 @@ function intakeObservationCard() {
 
 
 /* ============================================================ *
+ *  Inline SVG icons — no icon font, per the brief.
+ *  Stroke uses currentColor so the chip's ink token drives it; drawing an
+ *  icon directly on a surface must use a head-coloured wrapper, never the
+ *  chip ink (that produced a 1.06:1 invisible icon in the design review).
+ * ============================================================ */
+function svg(path, size) {
+  return '<svg class="ico" width="' + (size || 20) + '" height="' + (size || 20) +
+    '" viewBox="0 0 20 20" aria-hidden="true"><path d="' + path +
+    '" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function icoTimer() { return svg("M10 3a7 7 0 1 0 7 7 M10 10V6 M10 10l3 2"); }
+function icoFork()  { return svg("M5 4h10v13H5z M8 8h4 M8 11h4"); }
+function icoCal()   { return svg("M4 6h12v10H4z M4 9h12 M8 6v-2 M12 6v-2"); }
+function icoChart() { return svg("M4 15l4-5 3 3 5-7"); }
+function icoCup()   { return svg("M6 4h8l-1 12H7z M6 8h8"); }
+function icoGear()  { return svg("M10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M10 3v2 M10 15v2 M3 10h2 M15 10h2"); }
+
+/* ============================================================ *
+ *  Home hub
+ * ============================================================ */
+function homeScreen() {
+  var today = FT.todayISO();
+  var html = "";
+
+  // fasting card
+  var h = activeHours();
+  if (doc.session) {
+    var phase = FT.getPhase(h);
+    var target = doc.session.protocolHours;
+    var pct = target ? Math.min(1, h / target) : 0;
+    html += '<button class="card screen homeFast full" data-goto="fasting">' +
+      '<span class="hfRing">' + ringMini(pct) + '</span>' +
+      '<span class="hfBody"><span class="hfLabel">צום פעיל</span>' +
+      '<span class="hfTime n" id="homeElapsed">' + fmtHMS(Date.now() - doc.session.start) + '</span>' +
+      '<span class="hfPhase">' + esc(phase.label) + (target ? ' · יעד ' + n(target) + ' שעות' : '') +
+      '</span></span></button>';
+  } else {
+    html += '<button class="card screen homeFast full" data-goto="fasting">' +
+      '<span class="hfBody"><span class="hfLabel">לא בצום</span>' +
+      '<span class="hfPhase">לחצו כדי להתחיל</span></span></button>';
+  }
+
+  // weight + today
+  var sm = FT.smoothWeights(doc.weights);
+  var wNow = sm.length ? sm[sm.length - 1].trend : null;
+  var wPrev = sm.length > 7 ? sm[sm.length - 8].trend : null;
+  var delta = (wNow !== null && wPrev !== null) ? wNow - wPrev : null;
+  var day = FT.dayDoc(doc.days, today);
+  var flags = FT.dayFlags(day);
+
+  html += '<div class="homePair full">';
+  html += '<button class="card screen homeMini" data-goto="day"><span class="hmLabel">משקל היום</span>' +
+    '<span class="hmVal n">' + (wNow === null ? "—" : wNow.toFixed(1)) + '</span>' +
+    '<span class="hmDelta n ' + (delta === null ? "flat" : (delta < -0.05 ? "down" : (delta > 0.05 ? "up" : "flat"))) + '">' +
+    (delta === null ? "—" : (delta > 0 ? "+" : "") + delta.toFixed(1)) + '</span></button>';
+  html += '<button class="card screen homeMini" data-goto="day"><span class="hmLabel">היום</span>' +
+    '<span class="hmTags">';
+  var anyTag = false;
+  FT.DAY_TAGS.forEach(function (t) {
+    if (flags.counts[t.key] > 0) { anyTag = true;
+      html += '<span class="tagPill t-' + t.key + '">' + esc(t.label) + '</span>'; }
+  });
+  if (day.training) { anyTag = true; html += '<span class="tagPill t-train">אימון</span>'; }
+  if (!anyTag) html += '<span class="hmEmpty">עדיין ריק</span>';
+  html += '</span></button></div>';
+
+  // tiles
+  var tiles = [
+    ["fasting", "הצום שלי", icoTimer(), "fast"],
+    ["day", "הארוחות של היום", icoFork(), "day"],
+    ["week", "תכנון השבוע", icoCal(), "week"],
+    ["tracking", "מעקב ומדידות", icoChart(), "track"],
+    ["intake", "צריכה", icoCup(), "intake"],
+    ["settings", "הגדרות", icoGear(), "set"]
+  ];
+  html += '<div class="tileGrid full">';
+  tiles.forEach(function (t) {
+    html += '<button class="card screen tile" data-goto="' + t[0] + '">' +
+      '<span class="tileChip c-' + t[3] + '">' + t[2] + '</span>' +
+      '<span class="tileLabel">' + esc(t[1]) + '</span></button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function ringMini(pct) {
+  var r = 26, c = 2 * Math.PI * r;
+  return '<svg width="64" height="64" viewBox="0 0 64 64">' +
+    '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="var(--ringTrack)" stroke-width="6"/>' +
+    '<circle id="homeArc" cx="32" cy="32" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="6" ' +
+    'stroke-linecap="round" stroke-dasharray="' + (c * Math.max(0, Math.min(1, pct))).toFixed(1) +
+    ' ' + c.toFixed(1) + '" transform="rotate(-90 32 32)"/></svg>';
+}
+
+/* ============================================================ *
+ *  Day screen — the ruled notepad
+ * ============================================================ */
+function slotDraftText(date, key, saved) {
+  if (view.slotDrafts && view.slotDrafts.date === date &&
+      typeof view.slotDrafts.text[key] === "string") {
+    return view.slotDrafts.text[key];
+  }
+  return saved;
+}
+
+function dayDirty(date, day) {
+  if (!view.slotDrafts || view.slotDrafts.date !== date) return false;
+  return FT.SLOT_KEYS.some(function (k) {
+    var d = view.slotDrafts.text[k];
+    return typeof d === "string" && d !== day.slots[k].text;
+  });
+}
+
+function dayScreen() {
+  var date = currentDayDate();
+  var today = FT.todayISO();
+  var day = FT.dayDoc(doc.days, date);
+  var flags = FT.dayFlags(day);
+  var isToday = date === today;
+
+  var html = '<div class="card screen dayCard full">';
+
+  // ---- header + 7-day strip: 3 back, today, 3 ahead ----
+  var title = isToday ? "היום" : (date === FT.todayISO(new Date(Date.now() + 86400000)) ? "מחר" : WEEKDAYS[new Date(date + "T12:00:00").getDay()]);
+  html += '<div class="dayHead"><div class="dayHeadRow">' +
+    icoFork() + '<span class="screenTitle">' + esc(title) + '</span>' +
+    '<span class="dayHeadDate n">' + fmtDate(date) + '</span></div>';
+
+  html += '<div class="dayStrip">';
+  FT.dayRange(today, 3, 3).forEach(function (d) {
+    var dd = new Date(d + "T12:00:00");
+    var sel = d === date;
+    html += '<button class="dayPill' + (sel ? " sel" : "") + '" data-goday="' + d + '">' +
+      '<span class="dp1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) + '</span>' +
+      '<span class="dp2 n">' + dd.getDate() + '</span></button>';
+  });
+  html += '</div></div>';
+
+  // ---- weight ----
+  var w = doc.weights.filter(function (x) { return x.date === date; })[0];
+  html += '<div class="dayRow weightRow">' +
+    '<span class="rowLabel">משקל</span>' +
+    '<input type="number" step="0.1" id="dayWeight" class="numIn" placeholder="—" value="' +
+    (w ? w.kg.toFixed(1) : "") + '"/><span class="unit">ק״ג</span>' +
+    '<button class="btn accent sm" id="saveDayWeight">שמירה</button></div>';
+
+  // ---- training ----
+  html += '<div class="dayRow"><label class="chk"><input type="checkbox" id="dayTraining"' +
+    (day.training ? " checked" : "") + '/><span class="chkBox"></span>' +
+    '<span>אימון</span></label></div>';
+
+  // ---- tag buttons: same flow for all three ----
+  html += '<div class="tagBar">';
+  FT.DAY_TAGS.forEach(function (t) {
+    var c = flags.counts[t.key];
+    html += '<button class="tagBtn t-' + t.key + (view.picking === t.key ? " picking" : "") +
+      '" data-picktag="' + t.key + '">' + esc(t.label) +
+      (c > 0 ? ' <span class="tagCount n">' + c + '</span>' : '') + '</button>';
+  });
+  html += '</div>';
+
+  if (view.picking) {
+    html += '<div class="pickBar">באיזו ארוחה? לחצו על שם הארוחה למטה' +
+      '<button class="linkBtn" id="cancelPick">ביטול</button></div>';
+  }
+
+  // ---- six ruled rows ----
+  html += '<div class="rules">';
+  FT.SLOT_KEYS.forEach(function (k) {
+    var slot = day.slots[k];
+    html += '<div class="ruleRow' + (view.picking ? " picking" : "") + '">' +
+      '<button class="slotName" data-slot="' + k + '"' + (view.picking ? '' : ' disabled') + '>' +
+      esc(FT.SLOT_LABELS[k]) + '</button>' +
+      '<input type="text" class="slotIn" id="slot_' + k + '" data-slottext="' + k +
+      '" value="' + esc(slotDraftText(date, k, slot.text)) + '" placeholder="…"/>' +
+      '<span class="slotTags">';
+    slot.tags.forEach(function (tg) {
+      var t = FT.dayTag(tg);
+      html += '<button class="tagPill t-' + tg + '" data-untag="' + k + '|' + tg + '">' +
+        esc(t.label) + '</button>';
+    });
+    html += '</span></div>';
+  });
+  html += '</div>';
+
+  // ---- flags ----
+  if (flags.overCarb) {
+    html += '<div class="flagBar">פחמימה שנייה היום — מעבר להנחיה.</div>';
+  }
+  if (flags.overHappy) {
+    html += '<div class="flagBar">רגע אושר שני היום — מעבר להנחיה.</div>';
+  }
+  if (flags.standDown && (flags.carbCount > 1 || flags.happyCount > 1)) {
+    html += '<div class="note">יש ארוחת מה שבא לי היום, אז אין התראות על פחמימות.</div>';
+  }
+
+  // ---- explicit save ----
+  var dirty = dayDirty(date, day);
+  html += '<div class="btnRow">' +
+    '<button class="btn gold grow" id="saveDay"' + (dirty ? "" : " disabled") + '>' +
+    (dirty ? "שמירה" : "אין שינוי לשמור") + '</button>' +
+    (dirty ? '<button class="btn quiet" id="discardDay">ביטול</button>' : '') + '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================ *
+ *  Week screen
+ * ============================================================ */
+function weekScreen() {
+  var today = FT.todayISO();
+  var html = '<div class="screenHead full">' + icoCal() +
+    '<span class="screenTitle">תכנון השבוע</span></div>';
+  html += '<div class="weekList full">';
+  FT.weekDays(today, 7).forEach(function (d) {
+    var day = FT.dayDoc(doc.days, d);
+    var flags = FT.dayFlags(day);
+    var dd = new Date(d + "T12:00:00");
+    var texts = FT.SLOT_KEYS.map(function (k) { return day.slots[k].text.trim(); })
+      .filter(Boolean).join(", ");
+    html += '<button class="weekRow' + (d === today ? " isToday" : "") + '" data-goday="' + d + '">' +
+      '<span class="wDate"><span class="wD1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) +
+      '</span><span class="wD2 n">' + dd.getDate() + '</span></span>' +
+      '<span class="wBody"><span class="wSum' + (texts ? "" : " empty") + '">' +
+      (texts ? esc(texts) : "עדיין ריק — לחצו לתכנון") + '</span><span class="wTags">';
+    FT.DAY_TAGS.forEach(function (t) {
+      if (flags.counts[t.key] > 0) {
+        html += '<span class="tagPill t-' + t.key + '">' + esc(t.label) +
+          (flags.counts[t.key] > 1 ? ' <span class="n">' + flags.counts[t.key] + '</span>' : '') + '</span>';
+      }
+    });
+    html += '</span></span>' +
+      (day.training ? '<span class="wTrain">✓</span>' : '') + '</button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================ *
  *  Goals
  * ============================================================ */
 function goalsCard() {
@@ -1107,7 +1450,19 @@ function historyCard() {
 
 function settingsCard() {
   var perm = (typeof Notification !== "undefined") ? Notification.permission : "unsupported";
-  var html = '<div class="card" style="gap:10px"><div class="cardTitle">תזכורות וגיבוי</div>';
+  var theme = (doc.profile.theme || "dark");
+  var html = '<div class="screenHead full">' + icoGear() +
+    '<span class="screenTitle">הגדרות</span></div>';
+
+  html += '<div class="card"><div class="cardTitle">מראה</div>' +
+    '<div class="segRow">';
+  [["light", "יום"], ["dark", "לילה"], ["auto", "אוטומטי"]].forEach(function (o) {
+    html += '<button class="seg' + (theme === o[0] ? " on" : "") + '" data-theme="' + o[0] + '">' +
+      o[1] + '</button>';
+  });
+  html += '</div><div class="note">אוטומטי הולך אחרי הגדרת המערכת של הטלפון.</div></div>';
+
+  html += '<div class="card" style="gap:10px"><div class="cardTitle">תזכורות וגיבוי</div>';
   html += '<div class="row" style="border:none;padding:0"><span class="d">תזכורות</span>' +
     '<span class="d" style="color:' + (perm === "granted" ? "var(--sage)" : "var(--dim)") + '">' +
     (perm === "granted" ? "פעילות" : perm === "denied" ? "חסומות בדפדפן" : perm === "unsupported" ? "לא נתמך" : "כבויות") + '</span></div>';
@@ -1182,24 +1537,50 @@ function render() {
     return;
   }
 
-  var colA = fastingCard() + statusCard() + phaseGuideCard();
-  var colB = paceCard() + tilesCard() + chartCard() + intakeCard() + intakeObservationCard() +
-    logCard() + goalsCard() + historyCard() + settingsCard();
+  var snap = captureFocus();
+  var r = parseHash();
+  view.route = r.name;
+  document.documentElement.setAttribute("data-route", r.name);
 
-  app.innerHTML = header() + banners() +
-    '<div class="col">' + colA + '</div>' +
-    '<div class="col">' + colB + '</div>' +
+  var body;
+  switch (r.name) {
+    case "day":      body = dayScreen(); break;
+    case "week":     body = weekScreen(); break;
+    case "fasting":  body = fastingCard() + statusCard() + phaseGuideCard(); break;
+    case "tracking": body = paceCard() + tilesCard() + chartCard() + logCard() +
+                            goalsCard() + historyCard(); break;
+    case "intake":   body = intakeCard() + intakeObservationCard(); break;
+    case "settings": body = settingsCard(); break;
+    default:         body = homeScreen(); break;
+  }
+
+  app.innerHTML = topBar(r.name) + banners() + body +
     '<div class="foot full">גבולות השלבים הם ערכים טיפוסיים ואינם אישיים. אינו ייעוץ רפואי. ' +
     'קצב של ' + n("0.5–1") + ' ק״ג בשבוע נחשב בטוח ובר-קיימא לרוב האנשים. ' +
     'הנתונים נשמרים במכשיר הזה בלבד. ' + n("v" + FT.APP_VERSION) + '</div>';
 
   wire();
   renderToast();
+  restoreFocus(snap);
 }
 
 /* Patches text and geometry only, by id. */
 function tick() {
   if (!doc) return;
+
+  /* The day screen is full of text inputs. tick() patches only ids that exist
+     on other routes, plus the top-bar pill — it must never re-render here. */
+  var t0 = document.getElementById("topElapsed");
+  if (t0 && doc.session) t0.textContent = fmtHM(activeHours());
+  var h0 = document.getElementById("homeElapsed");
+  if (h0 && doc.session) h0.textContent = fmtHMS(Date.now() - doc.session.start);
+  var ha = document.getElementById("homeArc");
+  if (ha && doc.session && doc.session.protocolHours) {
+    var cc = 2 * Math.PI * 26;
+    var pp = Math.min(1, activeHours() / doc.session.protocolHours);
+    ha.setAttribute("stroke-dasharray", (cc * pp).toFixed(1) + " " + cc.toFixed(1));
+  }
+  if (view.route === "day" || view.route === "week") return;
 
   /* Live intake estimates decay whether or not a fast is running, so they are
      patched before the early return. innerHTML here is safe: the block holds
@@ -1268,6 +1649,87 @@ function on(id, fn, ev) { var e = document.getElementById(id); if (e) e.addEvent
 function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
 
 function wire() {
+  // ---- navigation ----
+  each("[data-goto]", function (b) {
+    b.onclick = function () { go(b.getAttribute("data-goto")); };
+  });
+  each("[data-goday]", function (b) {
+    b.onclick = function () {
+      var d = b.getAttribute("data-goday");
+      view.dayDate = d; view.picking = null; view.slotDrafts = null;
+      go("day", d);
+    };
+  });
+
+  // ---- day screen ----
+  on("saveDayWeight", function () {
+    var el = document.getElementById("dayWeight");
+    var kg = parseFloat(String(el.value).replace(",", "."));
+    if (!validWeight(kg)) { showToast("משקל לא תקין"); return; }
+    var date = currentDayDate();
+    if (FT.isFutureDate(date)) { showToast("אי אפשר לרשום שקילה בעתיד"); return; }
+    var before = doc.weights.slice();
+    doc.weights = FT.upsertWeight(doc.weights, date, kg).weights;
+    var ok = persist(); render();
+    showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה", ok ? function () { doc.weights = before; } : null);
+  });
+  on("dayTraining", function (e) {
+    doc.days = FT.setTraining(doc.days, currentDayDate(), e.target.checked);
+    persist(); render();
+  }, "change");
+
+  each("[data-picktag]", function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute("data-picktag");
+      view.picking = view.picking === k ? null : k;   // one picker at a time
+      render();
+    };
+  });
+  on("cancelPick", function () { view.picking = null; render(); });
+  each("[data-slot]", function (b) {
+    b.onclick = function () {
+      if (!view.picking) return;
+      doc.days = FT.setDayTag(doc.days, currentDayDate(), b.getAttribute("data-slot"), view.picking);
+      view.picking = null;
+      persist(); render();
+    };
+  });
+  each("[data-untag]", function (b) {
+    b.onclick = function () {
+      var p = b.getAttribute("data-untag").split("|");
+      doc.days = FT.clearDayTag(doc.days, currentDayDate(), p[0], p[1]);
+      persist(); render();
+    };
+  });
+
+  /* Slot text goes to a DRAFT, never straight to the doc. Writing through on
+     every keystroke would persist and re-render mid-word; see captureFocus(). */
+  each("[data-slottext]", function (el) {
+    el.oninput = function () {
+      var date = currentDayDate();
+      if (!view.slotDrafts || view.slotDrafts.date !== date) {
+        view.slotDrafts = { date: date, text: {} };
+      }
+      view.slotDrafts.text[el.getAttribute("data-slottext")] = el.value;
+      // enable the save button without a full render, so typing is never interrupted
+      var save = document.getElementById("saveDay");
+      if (save && save.disabled) { save.disabled = false; save.textContent = "שמירה"; }
+    };
+  });
+  on("saveDay", function () {
+    var date = currentDayDate();
+    if (!view.slotDrafts || view.slotDrafts.date !== date) return;
+    var days = doc.days;
+    FT.SLOT_KEYS.forEach(function (k) {
+      var t = view.slotDrafts.text[k];
+      if (typeof t === "string") days = FT.setSlotText(days, date, k, t);
+    });
+    doc.days = days; view.slotDrafts = null;
+    var ok = persist(); render();
+    showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה");
+  });
+  on("discardDay", function () { view.slotDrafts = null; render(); });
+
   each("[data-proto]", function (b) {
     b.onclick = function () {
       var v = b.getAttribute("data-proto");
@@ -1378,6 +1840,12 @@ function wire() {
     };
   });
 
+  each("[data-theme]", function (b) {
+    b.onclick = function () {
+      doc.profile.theme = b.getAttribute("data-theme");
+      persist(); applyTheme(); render();
+    };
+  });
   on("askNotif", requestNotifications);
   on("weighTime", function (e) { doc.reminders.weighIn = e.target.value; persist(); scheduleReminders(); }, "change");
   on("exportBtn", exportData);

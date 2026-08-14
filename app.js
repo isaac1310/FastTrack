@@ -4,9 +4,9 @@
  */
 "use strict";
 
-var APP_VERSION = "2.8.0";
+var APP_VERSION = "3.0.0";
 var LS_KEY = "fasttrack.doc";
-var SCHEMA_VERSION = 5;
+var SCHEMA_VERSION = 6;
 
 /* ============================================================ *
  *  Fasting phases
@@ -139,6 +139,138 @@ function intakeItem(key) {
 }
 function breaksFast(key) { var it = intakeItem(key); return !!(it && it.breaksFast); }
 
+/* ============================================================ *
+ *  Days — meal notes, tags and training
+ *
+ *  Deliberately thin: six named slots, a free-text line each, and tags that
+ *  the app counts. Nothing is inferred from the text — the app never reads
+ *  Hebrew to guess what you ate.
+ * ============================================================ */
+var SLOT_KEYS = ["morning", "mid1", "lunch", "mid2", "dinner", "late"];
+var SLOT_LABELS = {
+  morning: "בוקר", mid1: "ביניים", lunch: "צהריים",
+  mid2: "ביניים", dinner: "ערב", late: "לילה"
+};
+
+var DAY_TAGS = [
+  { key: "carb",    label: "פחמימה",           limit: 1,    guide: "עד 250 קל׳" },
+  { key: "happy",   label: "רגע של אושר",      limit: 1,    guide: "100–150 קל׳" },
+  { key: "craving", label: "ארוחת מה שבא לי",  limit: null, guide: "" }
+];
+function dayTag(key) {
+  for (var i = 0; i < DAY_TAGS.length; i++) if (DAY_TAGS[i].key === key) return DAY_TAGS[i];
+  return null;
+}
+
+function emptyDay() {
+  var d = { slots: {}, training: false };
+  SLOT_KEYS.forEach(function (k) { d.slots[k] = { text: "", tags: [] }; });
+  return d;
+}
+
+/* Always returns a usable day, never undefined. Repairs partial shapes so a
+ * hand-edited or half-migrated document cannot crash the screen. */
+function dayDoc(days, dateISO) {
+  var src = (days && days[dateISO]) || null;
+  var out = emptyDay();
+  if (!src) return out;
+  out.training = !!src.training;
+  SLOT_KEYS.forEach(function (k) {
+    var s = src.slots && src.slots[k];
+    if (!s) return;
+    out.slots[k].text = typeof s.text === "string" ? s.text : "";
+    out.slots[k].tags = Array.isArray(s.tags)
+      ? s.tags.filter(function (t) { return !!dayTag(t); })
+      : [];
+  });
+  return out;
+}
+
+function dayIsEmpty(day) {
+  if (day.training) return false;
+  return !SLOT_KEYS.some(function (k) {
+    return day.slots[k].text.trim() !== "" || day.slots[k].tags.length > 0;
+  });
+}
+
+/* Counts across ALL six slots, because a tag can be assigned more than once —
+ * that is what makes the "second carb" flag reachable. A binary control could
+ * never produce this state. */
+function dayFlags(day) {
+  var counts = {};
+  DAY_TAGS.forEach(function (t) { counts[t.key] = 0; });
+  SLOT_KEYS.forEach(function (k) {
+    day.slots[k].tags.forEach(function (t) {
+      if (counts[t] !== undefined) counts[t]++;
+    });
+  });
+  var standDown = counts.craving > 0;
+  return {
+    counts: counts,
+    carbCount: counts.carb,
+    happyCount: counts.happy,
+    cravingCount: counts.craving,
+    /* On a day you chose to eat freely, the carb limit stands down. No point
+       nagging about a second carb after that decision is already made. */
+    standDown: standDown,
+    overCarb: !standDown && counts.carb > 1,
+    overHappy: !standDown && counts.happy > 1
+  };
+}
+
+/* Returns a NEW days object. Assigning the same tag to a second slot is
+ * allowed on purpose — see dayFlags(). */
+function setDayTag(days, dateISO, slotKey, tagKey) {
+  if (SLOT_KEYS.indexOf(slotKey) === -1 || !dayTag(tagKey)) return days || {};
+  var next = Object.assign({}, days || {});
+  var day = dayDoc(next, dateISO);
+  if (day.slots[slotKey].tags.indexOf(tagKey) === -1) {
+    day.slots[slotKey].tags = day.slots[slotKey].tags.concat([tagKey]);
+  }
+  next[dateISO] = day;
+  return next;
+}
+
+function clearDayTag(days, dateISO, slotKey, tagKey) {
+  var next = Object.assign({}, days || {});
+  var day = dayDoc(next, dateISO);
+  if (SLOT_KEYS.indexOf(slotKey) === -1) return next;
+  day.slots[slotKey].tags = day.slots[slotKey].tags.filter(function (t) { return t !== tagKey; });
+  next[dateISO] = day;
+  return next;
+}
+
+function setSlotText(days, dateISO, slotKey, text) {
+  if (SLOT_KEYS.indexOf(slotKey) === -1) return days || {};
+  var next = Object.assign({}, days || {});
+  var day = dayDoc(next, dateISO);
+  day.slots[slotKey].text = String(text == null ? "" : text);
+  next[dateISO] = day;
+  return next;
+}
+
+function setTraining(days, dateISO, on) {
+  var next = Object.assign({}, days || {});
+  var day = dayDoc(next, dateISO);
+  day.training = !!on;
+  next[dateISO] = day;
+  return next;
+}
+
+/* Date list for the strip and the week screen. Negative `back` reaches
+ * yesterday — the design ran forward only, which made logging a meal you
+ * forgot until the next morning impossible. */
+function dayRange(centerISO, back, forward) {
+  var out = [];
+  var c = new Date(centerISO + "T12:00:00");
+  for (var i = -Math.abs(back || 0); i <= Math.abs(forward || 0); i++) {
+    var d = new Date(c); d.setDate(d.getDate() + i);
+    out.push(todayISO(d));
+  }
+  return out;
+}
+function weekDays(startISO, n) { return dayRange(startISO, 0, (n || 7) - 1); }
+
 var MEASURE_PROTOCOL = [
   "בבוקר, בצום, אחרי השירותים, לפני שתייה.",
   "מותן בגובה הטבור, עמידה רגועה, נשיפה רגילה — בלי לשאוב פנימה.",
@@ -182,6 +314,7 @@ function emptyDoc() {
     reminders: { weighIn: "08:00", measureWeekday: 0, enabled: false, permission: "default" },
     session: null,
     fastHistory: [],
+    days: {},
     dismissed: {},
     lastExportAt: null,
     updatedAt: new Date().toISOString()
@@ -241,6 +374,12 @@ function migrate(raw, v1entries, v1session) {
         delete parsed.intake;
         parsed.schemaVersion = 4;
       }
+      if (parsed.schemaVersion === 5) {
+        /* v6 adds day notes. Purely additive — no existing field changes
+           meaning, so this is an empty object and nothing else. */
+        if (!parsed.days || typeof parsed.days !== "object") parsed.days = {};
+        parsed.schemaVersion = 6;
+      }
       if (parsed.schemaVersion === 4) {
         /* v5 drops "coffee with milk" as a separate item. For everything the
            app computes with it — caffeine, timing — it IS a coffee, so old
@@ -249,6 +388,10 @@ function migrate(raw, v1entries, v1session) {
           if (e && e.key === "coffeeMilk") e.key = "coffeeBlack";
         });
         parsed.schemaVersion = 5;
+      }
+      if (parsed.schemaVersion === 5) {
+        if (!parsed.days || typeof parsed.days !== "object") parsed.days = {};
+        parsed.schemaVersion = 6;
       }
       return { doc: normalizeDoc(parsed), migrated: true };
     }
@@ -306,6 +449,8 @@ function normalizeDoc(d) {
   d.measures = Array.isArray(d.measures) ? d.measures : [];
   d.intakeLog = Array.isArray(d.intakeLog) ? d.intakeLog : [];
   d.dismissed = (d.dismissed && typeof d.dismissed === "object") ? d.dismissed : {};
+  d.days = (d.days && typeof d.days === "object" && !Array.isArray(d.days)) ? d.days : {};
+  if (!d.profile.theme) d.profile.theme = "dark";
   d.fastHistory = Array.isArray(d.fastHistory) ? d.fastHistory : [];
   if (d.session && !isFinite(d.session.start)) d.session = null;
   return d;
@@ -1274,6 +1419,10 @@ window.FT = {
   intakeOn: intakeOn, intakeTotals: intakeTotals,
   intakeByWeek: intakeByWeek, intakeObservation: intakeObservation,
   weekStart: weekStart,
+  SLOT_KEYS: SLOT_KEYS, SLOT_LABELS: SLOT_LABELS, DAY_TAGS: DAY_TAGS, dayTag: dayTag,
+  emptyDay: emptyDay, dayDoc: dayDoc, dayFlags: dayFlags, dayIsEmpty: dayIsEmpty,
+  setDayTag: setDayTag, clearDayTag: clearDayTag, setSlotText: setSlotText,
+  setTraining: setTraining, dayRange: dayRange, weekDays: weekDays,
   getPhase: getPhase, phaseIndex: phaseIndex, timeToNextPhase: timeToNextPhase,
   fastStats: fastStats, migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
   daysBetween: daysBetween, todayISO: todayISO, bmi: bmi, fmtDur: fmtDur,

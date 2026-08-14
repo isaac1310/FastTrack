@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>html,body{margin:0;}body{font-family:'Rubik',sans-serif;}a{color:#6D28D9;}a:hover{color:#5B21B6;}input::placeholder{color:#948AB8;}</style>
+</helmet>
+<div dir="rtl" lang="he" style="min-height:100vh;display:flex;justify-content:center;padding:24px 0 60px;background:{{ t.page }};transition:background 0.25s;">
+<div style="width:412px;color:{{ t.ink }};font-family:'Rubik',sans-serif;display:flex;flex-direction:column;gap:12px;">
+
+  <!-- top bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 6px;">
+    <button onClick="{{ goHome }}" style="display:flex;align-items:baseline;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:'Rubik',sans-serif;">
+      <span style="font-size:18px;font-weight:700;letter-spacing:0.3px;color:{{ t.head }};">FastTrack</span>
+    </button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <sc-if value="{{ fasting }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ goFasting }}" style="display:flex;align-items:center;gap:6px;background:{{ t.surface }};border:none;border-radius:999px;padding:5px 12px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ t.accent }};"></span>
+          <span style="font-size:12px;font-weight:600;color:{{ t.accent }};direction:ltr;unicode-bidi:isolate;">{{ elapsedShort }}</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ showBack }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ goHome }}" style="background:{{ t.surface }};border:none;border-radius:999px;padding:6px 14px;cursor:pointer;font-family:'Rubik',sans-serif;font-size:12.5px;font-weight:600;color:{{ t.head }};box-shadow:{{ t.cardShadow }};">בית</button>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- ============ HOME ============ -->
+  <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="בית" style="display:flex;flex-direction:column;gap:12px;">
+      <!-- fasting tile -->
+      <button onClick="{{ goFasting }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;text-align:start;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;color:{{ t.accent }};">צום פעיל</span>
+          <span style="font-size:24px;font-weight:700;color:{{ t.ink }};direction:ltr;unicode-bidi:isolate;">{{ elapsed }}</span>
+          <span style="font-size:12px;color:{{ t.muted }};">{{ phaseLabel }} · יעד <span style="direction:ltr;unicode-bidi:isolate;">16</span> שע׳</span>
+        </div>
+        <div style="position:relative;width:64px;height:64px;flex-shrink:0;">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="{{ t.ringTrack }}" stroke-width="6"></circle>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="{{ t.accent }}" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{ ringDashSm }}" transform="rotate(-90 32 32)"></circle>
+          </svg>
+          <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:{{ t.accent }};direction:ltr;unicode-bidi:isolate;">{{ pctText }}</span>
+        </div>
+      </button>
+      <!-- weight + tags row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <button onClick="{{ goDay }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:3px;cursor:pointer;text-align:start;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;color:{{ t.head }};">משקל היום</span>
+          <span style="font-size:22px;font-weight:700;direction:ltr;unicode-bidi:isolate;color:{{ t.ink }};">74.1</span>
+          <span style="font-size:11.5px;font-weight:600;color:{{ t.accent }};direction:ltr;unicode-bidi:isolate;">-0.2</span>
+        </button>
+        <button onClick="{{ goDay }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;text-align:start;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;color:{{ t.head }};">היום</span>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            <span style="font-size:10.5px;font-weight:600;background:{{ t.tagCarbBg }};color:{{ t.tagInk }};border-radius:999px;padding:3px 9px;">פחמימה</span>
+            <span style="font-size:10.5px;font-weight:600;background:{{ t.tagHappyBg }};color:{{ t.tagInk }};border-radius:999px;padding:3px 9px;">רגע של אושר</span>
+          </div>
+        </button>
+      </div>
+      <!-- action buttons -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <button onClick="{{ goFasting }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnFastBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 13V9"></path><path d="M12 13l3 2"></path><path d="M9 2h6"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">הצום שלי</span>
+        </button>
+        <button onClick="{{ goDay }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnDayBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v9a3 3 0 0 0 6 0V3"></path><path d="M8 3v18"></path><path d="M18 3c-1.5 2-2 4-2 6s.5 3 2 3v9"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">הארוחות של היום</span>
+        </button>
+        <button onClick="{{ goWeek }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnWeekBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M8 3v4"></path><path d="M16 3v4"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">תכנון השבוע</span>
+        </button>
+        <button onClick="{{ goTracking }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnSetBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-6 4 4 7-9"></path><path d="M4 21V4"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">מעקב ומדידות</span>
+        </button>
+        <button onClick="{{ goIntake }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnFastBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"></path><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16"></path><path d="M8 3v2"></path><path d="M12 3v2"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">צריכה</span>
+        </button>
+        <button onClick="{{ goSettings }}" style="background:{{ t.surface }};border:none;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};">
+          <span style="width:38px;height:38px;border-radius:13px;background:{{ t.btnSetBg }};display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconInk }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><path d="M5.6 5.6l2.1 2.1"></path><path d="M16.3 16.3l2.1 2.1"></path><path d="M18.4 5.6l-2.1 2.1"></path><path d="M7.7 16.3l-2.1 2.1"></path></svg>
+          </span>
+          <span style="font-size:13.5px;font-weight:600;color:{{ t.ink }};">הגדרות</span>
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DAY ============ -->
+  <sc-if value="{{ isDay }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="יום" style="background:{{ t.surface }};border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:{{ t.cardShadow }};">
+      <div style="padding:16px 16px 12px;background:{{ t.headerWash }};display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:center;gap:9px;padding:0 4px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconHead }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v9a3 3 0 0 0 6 0V3"></path><path d="M8 3v18"></path><path d="M18 3c-1.5 2-2 4-2 6s.5 3 2 3v9"></path></svg>
+          <span style="font-size:18px;font-weight:700;color:{{ t.head }};">{{ dayTitle }}</span>
+          <span style="font-size:12.5px;font-weight:500;color:{{ t.muted }};">{{ dayName }} · <span style="direction:ltr;unicode-bidi:isolate;">{{ dayDate }}</span></span>
+        </div>
+        <div style="display:flex;gap:5px;">
+          <sc-for list="{{ weekDays }}" as="wd" hint-placeholder-count="7">
+            <button onClick="{{ wd.go }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;background:{{ wd.bg }};border:none;border-radius:10px;padding:7px 0 6px;cursor:pointer;font-family:'Rubik',sans-serif;">
+              <span style="font-size:10.5px;font-weight:600;color:{{ wd.nameColor }};">{{ wd.name }}</span>
+              <span style="font-size:12px;font-weight:700;color:{{ wd.dateColor }};direction:ltr;unicode-bidi:isolate;">{{ wd.date }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1.5px solid {{ t.divider }};">
+        <span style="font-size:11.5px;font-weight:700;letter-spacing:1px;color:{{ t.accent }};">משקל</span>
+        <input value="74.1" style="width:74px;background:{{ t.inputBg }};border:none;border-radius:10px;font-family:'Rubik',sans-serif;font-size:16px;font-weight:600;color:{{ t.ink }};padding:7px 8px;direction:ltr;text-align:center;outline:none;">
+        <span style="font-size:11px;color:{{ t.muted }};">ק״ג</span>
+        <button style="margin-inline-start:auto;background:{{ t.accentFill }};color:{{ t.accentInk }};border:none;border-radius:10px;font-family:'Rubik',sans-serif;font-size:13px;font-weight:600;padding:8px 18px;cursor:pointer;">שמירה</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:14px 20px;border-bottom:1.5px solid {{ t.divider }};">
+        <button onClick="{{ toggleTraining }}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:'Rubik',sans-serif;">
+          <span style="width:22px;height:22px;border-radius:7px;background:{{ trainingBg }};border:2px solid {{ t.accent }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:{{ t.accentInk }};">{{ trainingMark }}</span>
+          <span style="font-size:13.5px;font-weight:500;color:{{ t.ink }};">אימון</span>
+        </button>
+        <button onClick="{{ toggleCraving }}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:'Rubik',sans-serif;">
+          <span style="width:22px;height:22px;border-radius:7px;background:{{ cravingBg }};border:2px solid {{ t.flagSoft }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:{{ t.flag }};">{{ cravingMark }}</span>
+          <span style="font-size:13.5px;font-weight:500;color:{{ t.ink }};">ארוחת מה שבא לי</span>
+        </button>
+        <button onClick="{{ toggleHappy }}" style="display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;font-family:'Rubik',sans-serif;">
+          <span style="width:22px;height:22px;border-radius:7px;background:{{ happyBg }};border:2px solid {{ t.headSoft }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:{{ t.head }};">{{ happyMark }}</span>
+          <span style="font-size:13.5px;font-weight:500;color:{{ t.ink }};">רגע של אושר</span>
+        </button>
+      </div>
+      <sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:10px 20px;background:{{ t.flagBg }};font-size:12.5px;font-weight:600;color:{{ t.flag }};">{{ pickerText }}</div>
+      </sc-if>
+      <div style="display:flex;flex-direction:column;">
+        <sc-for list="{{ slots }}" as="s" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:12px;min-height:54px;padding:0 20px;border-bottom:1px dashed {{ t.rule }};background:{{ s.rowBg }};">
+            <button onClick="{{ s.pick }}" style="font-size:11px;font-weight:600;letter-spacing:0.5px;color:{{ t.link }};width:48px;flex-shrink:0;background:none;border:none;padding:0;text-align:start;cursor:{{ s.cursor }};font-family:'Rubik',sans-serif;">{{ s.name }}</button>
+            <input value="{{ s.text }}" placeholder="…" style="flex:1;background:transparent;border:none;font-family:'Rubik',sans-serif;font-size:15px;color:{{ t.ink }};outline:none;min-width:0;">
+            <sc-if value="{{ s.tag }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:10.5px;font-weight:600;background:{{ s.tagBg }};color:{{ t.tagInk }};border-radius:999px;padding:3px 10px;white-space:nowrap;">{{ s.tag }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ showFlag }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:14px 20px 0;background:{{ t.flagBg }};border-radius:12px;padding:10px 14px;display:flex;gap:8px;align-items:center;">
+          <span style="font-size:13px;font-weight:800;color:{{ t.flag }};">!</span>
+          <span style="font-size:12.5px;font-weight:600;color:{{ t.flag }};">פחמימה שנייה היום — מעבר להנחיה</span>
+        </div>
+      </sc-if>
+      <div style="height:18px;"></div>
+    </div>
+  </sc-if>
+
+  <!-- ============ WEEK ============ -->
+  <sc-if value="{{ isWeek }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="שבוע" style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:0 6px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconHead }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M8 3v4"></path><path d="M16 3v4"></path></svg>
+        <span style="font-size:18px;font-weight:700;color:{{ t.head }};">תכנון השבוע</span>
+      </div>
+      <sc-for list="{{ weekRows }}" as="w" hint-placeholder-count="7">
+        <button onClick="{{ w.open }}" style="background:{{ t.surface }};border:none;border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;text-align:start;font-family:'Rubik',sans-serif;box-shadow:{{ t.cardShadow }};border-inline-start:4px solid {{ w.edge }};">
+          <div style="display:flex;flex-direction:column;align-items:center;width:40px;flex-shrink:0;">
+            <span style="font-size:11px;font-weight:600;color:{{ t.link }};">{{ w.name }}</span>
+            <span style="font-size:15px;font-weight:700;color:{{ t.ink }};direction:ltr;unicode-bidi:isolate;">{{ w.date }}</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;">
+            <span style="font-size:13px;color:{{ w.summaryColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ w.summary }}</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <sc-for list="{{ w.tags }}" as="tg" hint-placeholder-count="0">
+                <span style="font-size:10px;font-weight:600;background:{{ tg.bg }};color:{{ t.tagInk }};border-radius:999px;padding:2px 8px;">{{ tg.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <sc-if value="{{ w.training }}" hint-placeholder-val="{{ false }}">
+            <span style="width:20px;height:20px;border-radius:6px;background:{{ t.accentFill }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:{{ t.accentInk }};flex-shrink:0;">✓</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ============ FASTING ============ -->
+  <sc-if value="{{ isFasting }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="צום" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="background:{{ t.surface }};border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:14px;box-shadow:{{ t.cardShadow }};">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="position:relative;width:124px;height:124px;flex-shrink:0;">
+            <svg width="124" height="124" viewBox="0 0 124 124">
+              <circle cx="62" cy="62" r="52" fill="none" stroke="{{ t.ringTrack }}" stroke-width="9"></circle>
+              <circle cx="62" cy="62" r="52" fill="none" stroke="{{ t.accent }}" stroke-width="9" stroke-linecap="round" stroke-dasharray="{{ ringDash }}" transform="rotate(-90 62 62)"></circle>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:0.3px;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;color:{{ t.ink }};">{{ elapsed }}</div>
+              <div style="font-size:11px;color:{{ t.muted }};">מתוך <span style="direction:ltr;unicode-bidi:isolate;">16</span> שע׳</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:{{ t.muted }};">שלב נוכחי</div>
+            <div style="font-size:17px;font-weight:700;color:{{ t.accent }};line-height:1.25;">{{ phaseLabel }}</div>
+            <div style="font-size:13px;color:{{ t.muted }};line-height:1.5;">לשלב הבא בעוד <span style="font-weight:600;color:{{ t.ink }};direction:ltr;unicode-bidi:isolate;">{{ toNext }}</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;gap:3px;height:8px;direction:ltr;">
+            <sc-for list="{{ segs }}" as="s" hint-placeholder-count="7">
+              <div style="flex:{{ s.flex }};border-radius:4px;background:{{ s.bg }};position:relative;overflow:hidden;">
+                <sc-if value="{{ s.fillPct }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;inset:0;width:{{ s.fillPct }};background:{{ t.accent }};border-radius:4px;"></div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:{{ t.dim }};direction:ltr;">
+            <span>0h</span><span>4</span><span>12</span><span>16</span><span>24</span><span>36</span><span style="unicode-bidi:isolate;direction:ltr;">72h+</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button style="flex:1;background:{{ t.inputBg }};border:none;color:{{ t.ink }};font-family:'Rubik',sans-serif;font-size:14px;font-weight:600;border-radius:12px;padding:11px;cursor:pointer;">סיום צום</button>
+          <button style="background:{{ t.inputBg }};border:none;color:{{ t.muted }};font-family:'Rubik',sans-serif;font-size:14px;border-radius:12px;padding:11px 16px;cursor:pointer;">עריכת התחלה</button>
+        </div>
+      </div>
+      <div style="background:{{ t.surface }};border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:{{ t.cardShadow }};">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+          <div style="font-size:15px;font-weight:700;color:{{ t.head }};">מה קורה עכשיו בגוף</div>
+          <div style="font-size:11px;color:{{ t.dim }};">גבולות טיפוסיים, לא אישיים</div>
+        </div>
+        <div style="font-size:13.5px;color:{{ t.ink }};line-height:1.65;">מאגרי הגליקוגן מתרוקנים והגוף עובר להסתמך על שומן. הרעב הכי בולט בשלב הזה — קורט מלח במים עוזר.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ SETTINGS ============ -->
+  <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="הגדרות" style="background:{{ t.surface }};border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:16px;box-shadow:{{ t.cardShadow }};">
+      <div style="display:flex;align-items:center;gap:9px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconHead }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><path d="M5.6 5.6l2.1 2.1"></path><path d="M16.3 16.3l2.1 2.1"></path><path d="M18.4 5.6l-2.1 2.1"></path><path d="M7.7 16.3l-2.1 2.1"></path></svg>
+        <span style="font-size:18px;font-weight:700;color:{{ t.head }};">הגדרות</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:14px;font-weight:500;color:{{ t.ink }};">ערכת נושא</span>
+        <div style="display:flex;gap:4px;background:{{ t.inputBg }};border-radius:999px;padding:4px;">
+          <button onClick="{{ setLight }}" style="border:none;border-radius:999px;padding:6px 16px;cursor:pointer;font-family:'Rubik',sans-serif;font-size:12.5px;font-weight:600;background:{{ lightBg }};color:{{ lightColor }};">יום</button>
+          <button onClick="{{ setDark }}" style="border:none;border-radius:999px;padding:6px 16px;cursor:pointer;font-family:'Rubik',sans-serif;font-size:12.5px;font-weight:600;background:{{ darkBg }};color:{{ darkColor }};">לילה</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:14px;font-weight:500;color:{{ t.ink }};">שעת שקילה</span>
+        <span style="font-size:14px;font-weight:600;color:{{ t.muted }};direction:ltr;unicode-bidi:isolate;">07:00</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button style="flex:1;background:{{ t.inputBg }};border:none;color:{{ t.ink }};font-family:'Rubik',sans-serif;font-size:13px;font-weight:600;border-radius:12px;padding:11px;cursor:pointer;">ייצוא JSON</button>
+        <button style="flex:1;background:{{ t.inputBg }};border:none;color:{{ t.ink }};font-family:'Rubik',sans-serif;font-size:13px;font-weight:600;border-radius:12px;padding:11px;cursor:pointer;">ייבוא JSON</button>
+      </div>
+      <div style="font-size:11px;color:{{ t.dim }};line-height:1.7;">גבולות השלבים הם ערכים טיפוסיים ואינם אישיים. אינו ייעוץ רפואי.</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TRACKING ============ -->
+  <sc-if value="{{ isTracking }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="מעקב" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:0 6px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconHead }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-6 4 4 7-9"></path><path d="M4 21V4"></path></svg>
+        <span style="font-size:18px;font-weight:700;color:{{ t.head }};">מעקב</span>
+      </div>
+      <div style="background:{{ t.surface }};border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;box-shadow:{{ t.cardShadow }};">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-size:15px;font-weight:700;color:{{ t.head }};">פריז · <span style="direction:ltr;unicode-bidi:isolate;">18.9.2026</span></span>
+            <span style="font-size:12px;color:{{ t.muted }};">יעד <span style="direction:ltr;unicode-bidi:isolate;">70.0</span> ק״ג · עוד <span style="direction:ltr;unicode-bidi:isolate;">35</span> ימים</span>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:{{ t.accent }};background:{{ t.inputBg }};border-radius:999px;padding:5px 12px;">בקצב</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <sc-for list="{{ paceTiles }}" as="p" hint-placeholder-count="3">
+            <div style="background:{{ t.inputBg }};border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px;align-items:center;">
+              <span style="font-size:11px;color:{{ t.muted }};">{{ p.label }}</span>
+              <span style="font-size:16px;font-weight:700;color:{{ p.color }};direction:ltr;unicode-bidi:isolate;">{{ p.value }}</span>
+              <span style="font-size:10px;color:{{ t.dim }};">{{ p.unit }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <sc-for list="{{ statTiles }}" as="s" hint-placeholder-count="3">
+          <div style="background:{{ t.surface }};border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:3px;box-shadow:{{ t.cardShadow }};">
+            <span style="font-size:11px;color:{{ t.muted }};">{{ s.label }}</span>
+            <span style="font-size:19px;font-weight:700;color:{{ t.ink }};direction:ltr;unicode-bidi:isolate;">{{ s.value }}</span>
+            <span style="font-size:11px;font-weight:600;color:{{ t.accent }};direction:ltr;unicode-bidi:isolate;">{{ s.delta }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background:{{ t.surface }};border-radius:16px;padding:12px 16px;display:flex;gap:10px;align-items:center;box-shadow:{{ t.cardShadow }};">
+        <span style="width:8px;height:8px;border-radius:50%;background:{{ t.accent }};flex-shrink:0;"></span>
+        <span style="font-size:12.5px;color:{{ t.muted }};line-height:1.5;">המותן יורד יחד עם המשקל — הירידה נראית כשומן. מבוסס על <span style="direction:ltr;unicode-bidi:isolate;">4</span> מדידות לפי פרוטוקול.</span>
+      </div>
+      <div style="background:{{ t.surface }};border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:{{ t.cardShadow }};">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+          <span style="font-size:15px;font-weight:700;color:{{ t.head }};">מגמת משקל</span>
+          <span style="font-size:11px;color:{{ t.dim }};"><span style="direction:ltr;unicode-bidi:isolate;">21</span> ימים אחרונים</span>
+        </div>
+        <div style="position:relative;height:140px;">
+          <svg width="100%" height="140" viewBox="0 0 380 140" preserveAspectRatio="none" style="direction:ltr;">
+            <line x1="0" y1="120" x2="380" y2="120" stroke="{{ t.chartGoal }}" stroke-width="1.5" stroke-dasharray="5 5"></line>
+            <path d="M8,26 L372,112" stroke="{{ t.chartPace }}" stroke-width="1.2" stroke-dasharray="2 4" fill="none"></path>
+            <path d="M8,22 C90,32 170,50 250,66 C300,76 350,84 372,88" stroke="{{ t.accent }}" stroke-width="2.5" fill="none"></path>
+            <circle cx="8" cy="20" r="3" fill="{{ t.chartDot }}"></circle><circle cx="53" cy="28" r="3" fill="{{ t.chartDot }}"></circle><circle cx="98" cy="25" r="3" fill="{{ t.chartDot }}"></circle><circle cx="143" cy="38" r="3" fill="{{ t.chartDot }}"></circle><circle cx="188" cy="46" r="3" fill="{{ t.chartDot }}"></circle><circle cx="233" cy="58" r="3" fill="{{ t.chartDot }}"></circle><circle cx="278" cy="68" r="3" fill="{{ t.chartDot }}"></circle><circle cx="323" cy="80" r="3" fill="{{ t.chartDot }}"></circle><circle cx="368" cy="86" r="3" fill="{{ t.chartDot }}"></circle>
+          </svg>
+          <span style="position:absolute;right:2px;top:2px;font-size:10.5px;color:{{ t.muted }};background:{{ t.surface }};padding:0 4px;direction:ltr;unicode-bidi:isolate;">76.0</span>
+          <span style="position:absolute;left:2px;bottom:12px;font-size:10.5px;font-weight:600;color:{{ t.head }};background:{{ t.surface }};padding:0 4px;">יעד פריז · <span style="direction:ltr;unicode-bidi:isolate;">70.0</span></span>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:{{ t.muted }};">
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:{{ t.chartDot }};"></span>שקילות</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:2px;background:{{ t.accent }};"></span>מגמה</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="width:14px;height:0;border-top:2px dashed {{ t.chartPace }};"></span>קצב נדרש</span>
+        </div>
+      </div>
+      <div style="background:{{ t.surface }};border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:{{ t.cardShadow }};">
+        <span style="font-size:15px;font-weight:700;color:{{ t.head }};">מדידות שבועיות</span>
+        <div style="display:flex;gap:8px;">
+          <input placeholder="מותן" style="flex:1;background:{{ t.inputBg }};border:none;border-radius:10px;font-family:'Rubik',sans-serif;font-size:14px;color:{{ t.ink }};padding:9px 12px;direction:ltr;text-align:right;outline:none;">
+          <input placeholder="ירך" style="flex:1;background:{{ t.inputBg }};border:none;border-radius:10px;font-family:'Rubik',sans-serif;font-size:14px;color:{{ t.ink }};padding:9px 12px;direction:ltr;text-align:right;outline:none;">
+          <button style="background:{{ t.accentFill }};color:{{ t.accentInk }};border:none;border-radius:10px;font-family:'Rubik',sans-serif;font-size:13px;font-weight:600;padding:9px 18px;cursor:pointer;">שמירה</button>
+        </div>
+        <span style="font-size:11.5px;color:{{ t.dim }};line-height:1.6;">בבוקר, בצום, לפני שתייה, בעמידה — אותו מקום בכל שבוע.</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INTAKE ============ -->
+  <sc-if value="{{ isIntake }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="צריכה" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:0 6px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ t.iconHead }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"></path><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16"></path><path d="M8 3v2"></path><path d="M12 3v2"></path></svg>
+        <span style="font-size:18px;font-weight:700;color:{{ t.head }};">צריכה</span>
+      </div>
+      <sc-for list="{{ intakeItems }}" as="it" hint-placeholder-count="4">
+        <div style="background:{{ t.surface }};border-radius:18px;padding:14px 18px;display:flex;align-items:center;gap:14px;box-shadow:{{ t.cardShadow }};">
+          <span style="width:34px;height:34px;border-radius:12px;background:{{ it.chip }};flex-shrink:0;"></span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;">
+            <span style="font-size:14.5px;font-weight:600;color:{{ t.ink }};">{{ it.label }}</span>
+            <span style="font-size:11.5px;color:{{ t.muted }};">{{ it.note }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button onClick="{{ it.dec }}" style="width:30px;height:30px;border-radius:10px;background:{{ t.inputBg }};border:none;font-size:16px;font-weight:700;color:{{ t.ink }};cursor:pointer;font-family:'Rubik',sans-serif;">−</button>
+            <span style="font-size:17px;font-weight:700;color:{{ t.ink }};min-width:18px;text-align:center;direction:ltr;unicode-bidi:isolate;">{{ it.count }}</span>
+            <button onClick="{{ it.inc }}" style="width:30px;height:30px;border-radius:10px;background:{{ t.inputBg }};border:none;font-size:16px;font-weight:700;color:{{ t.ink }};cursor:pointer;font-family:'Rubik',sans-serif;">+</button>
+          </div>
+        </div>
+      </sc-for>
+      <div style="background:{{ t.surface }};border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;box-shadow:{{ t.cardShadow }};">
+        <span style="font-size:15px;font-weight:700;color:{{ t.head }};">מצב הגוף עכשיו</span>
+        <span style="font-size:13px;color:{{ t.ink }};line-height:1.65;">{{ bodyStatus }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;440px&quot;,&quot;height&quot;:&quot;900px&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: "light", route: "home", now: Date.now(), intake: { coffee: 2, alcohol: 0, meat: 1, gluten: 0 },
+    training: true, craving: false, cravingSlot: null, picking: false,
+    happy: false, happySlot: null, happyPicking: false, dayOffset: 0
+  };
+  componentDidMount() {
+    this._t = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    this._onHash = () => {
+      const r = (location.hash || "#/home").replace("#/", "");
+      this.setState({ route: r || "home" });
+    };
+    window.addEventListener("hashchange", this._onHash);
+  }
+  componentWillUnmount() { clearInterval(this._t); window.removeEventListener("hashchange", this._onHash); }
+  nav(r) { this.setState({ route: r }); try { history.replaceState(null, "", "#/" + r); } catch (e) {} }
+  renderVals() {
+    const dark = this.state.theme === "dark";
+    const t = dark ? {
+      page: "#100C1A", surface: "#1B1430", inputBg: "#271D42", headerWash: "#271D42",
+      ink: "#F2ECFF", muted: "#B9AEDA", dim: "#948AB8", head: "#C7B3FF", headSoft: "#C7B3FF",
+      accent: "#5EEAD4", accentFill: "#5EEAD4", accentInk: "#100C1A",
+      flag: "#FF8FC3", flagSoft: "#FF8FC3", flagBg: "rgba(255,143,195,0.14)",
+      link: "#8FD6FF", divider: "#271D42", rule: "#3A2C5E", ringTrack: "#271D42",
+      tagCarbBg: "#4A3E1B", tagHappyBg: "#3A2C5E", tagInk: "#F2ECFF",
+      cardShadow: "0 1px 0 rgba(199,179,255,0.25)", navShadow: "0 6px 20px rgba(0,0,0,0.5)",
+      btnFastBg: "#5EEAD4", btnDayBg: "#C7B3FF", btnWeekBg: "#FF8FC3", btnSetBg: "#8FD6FF", iconInk: "#100C1A", iconHead: "#C7B3FF",
+      chartGoal: "#C7B3FF", chartPace: "#948AB8", chartDot: "#F2ECFF"
+    } : {
+      page: "#EAE3F6", surface: "#FFFFFF", inputBg: "#E4F7F4", headerWash: "#F3EDFB",
+      ink: "#3F3D56", muted: "#3F3D56", dim: "#5B21B6", head: "#5B21B6", headSoft: "#C4B5FD",
+      accent: "#0F766E", accentFill: "#0F766E", accentInk: "#FFFFFF",
+      flag: "#9D174D", flagSoft: "#F0ABFC", flagBg: "#FBCFE8",
+      link: "#6D28D9", divider: "#E4F7F4", rule: "#DCD3F0", ringTrack: "#F3EDFB",
+      tagCarbBg: "#FDE047", tagHappyBg: "#C4B5FD", tagInk: "#3F3D56",
+      cardShadow: "0 2px 0 #C4B5FD, 0 14px 34px rgba(91,33,182,0.10)", navShadow: "0 6px 20px rgba(91,33,182,0.18)",
+      btnFastBg: "#99F6E4", btnDayBg: "#C4B5FD", btnWeekBg: "#FBCFE8", btnSetBg: "#E4F7F4", iconInk: "#1A1725", iconHead: "#5B21B6",
+      chartGoal: "#A78BFA", chartPace: "#948AB8", chartDot: "#3F3D56"
+    };
+    const st = this.state, r = st.route;
+    // fasting clock (started 14h ago)
+    const startMs = this._start ?? (this._start = Date.now() - 14 * 3600e3);
+    const el = st.now - startMs;
+    const p2 = n => String(n).padStart(2, "0");
+    const h = Math.floor(el / 3600e3), m = Math.floor(el / 60e3) % 60, sc = Math.floor(el / 1e3) % 60;
+    const elH = el / 3600e3;
+    const PH = [[0,4,"עיכול וספיגה"],[4,12,"שריפת גליקוגן"],[12,16,"המעבר לשריפת שומן"],[16,24,"קטוזיס מוקדם"],[24,36,"קטוזיס עמוק"],[36,72,"צום ממושך"],[72,96,"צום מורחב מאוד"]];
+    const pi = Math.max(0, PH.findIndex(p => elH >= p[0] && elH < p[1]));
+    const toNextMs = PH[pi][1] * 3600e3 - el;
+    const C = 2 * Math.PI * 52, C2 = 2 * Math.PI * 26;
+    const pct = Math.min(1, el / (16 * 3600e3));
+    const segs = PH.map((p, i) => ({
+      flex: String(Math.sqrt(p[1] - p[0])),
+      bg: elH >= p[1] ? (dark ? "#3A9E8C" : "#99F6E4") : t.ringTrack,
+      fillPct: i === pi ? Math.round(((elH - p[0]) / (p[1] - p[0])) * 100) + "%" : false
+    }));
+    // day slots
+    const base = [
+      ["בוקר","יוגורט + אגוזים",false,""],["ביניים","",false,""],
+      ["צהריים","עוף וסלט, אורז","פחמימה",t.tagCarbBg],["ביניים","גלידה קטנה","רגע של אושר",t.tagHappyBg],
+      ["ערב","",false,""],["לילה","",false,""]
+    ];
+    const anyPicking = st.picking || st.happyPicking;
+    const slots = base.map((s, i) => {
+      const isCraving = st.craving && st.cravingSlot === i;
+      const isHappy = st.happy && st.happySlot === i;
+      let tag = s[2], tagBg = s[3];
+      if (st.craving && st.cravingSlot !== null) { tag = false; }
+      if (isHappy) { tag = "רגע של אושר"; tagBg = t.tagHappyBg; }
+      if (isCraving) { tag = "מה שבא לי"; tagBg = dark ? "#5E2C4A" : "#F0ABFC"; }
+      return {
+        name: s[0], text: s[1], tag, tagBg,
+        rowBg: anyPicking ? (dark ? "#221A3C" : "#FDF9FE") : "transparent",
+        cursor: anyPicking ? "pointer" : "default",
+        pick: () => {
+          if (this.state.picking) this.setState({ cravingSlot: i, picking: false });
+          else if (this.state.happyPicking) this.setState({ happySlot: i, happyPicking: false });
+        }
+      };
+    });
+    const DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+    const d = new Date(); d.setDate(d.getDate() + st.dayOffset);
+    const icon = (path) => React.createElement("path", { d: path, fill: "none", stroke: dark ? "#100C1A" : "#FFFFFF", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" });
+    const iconBgs = dark ? ["#C7B3FF","#5EEAD4","#FF8FC3","#8FD6FF","#C7B3FF","#5EEAD4"] : ["#A78BFA","#0F766E","#9D174D","#6D28D9","#0F766E","#A78BFA"];
+    const navDefs = [
+      ["day","היום","M5 4h10v13H5z M8 8h4 M8 11h4"],
+      ["week","שבוע","M4 6h12v10H4z M4 9h12 M8 6v-2 M12 6v-2"],
+      ["fasting","צום","M10 3a7 7 0 1 0 7 7 M10 10V6 M10 10l3 2"],
+      ["tracking","מעקב","M4 15l4-5 3 3 5-7"],
+      ["intake","צריכה","M6 4h8l-1 12H7z M6 8h8"],
+      ["settings","הגדרות","M10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M10 3v2 M10 15v2 M3 10h2 M15 10h2"]
+    ];
+    const weekData = [
+      { summary: "יוגורט, עוף וסלט, גלידה קטנה", tags: [{label:"פחמימה",bg:t.tagCarbBg},{label:"רגע של אושר",bg:t.tagHappyBg}], training: true },
+      { summary: "תכנון: דגים וירקות", tags: [], training: false },
+      { summary: "", tags: [{label:"ארוחת חופש",bg:dark?"#2C4A3E":"#99F6E4"}], training: true },
+      { summary: "", tags: [], training: false },
+      { summary: "", tags: [], training: true },
+      { summary: "", tags: [], training: false },
+      { summary: "", tags: [], training: false }
+    ];
+    return {
+      t,
+      isHome: r === "home", isDay: r === "day", isWeek: r === "week",
+      isFasting: r === "fasting", isSettings: r === "settings",
+      isTracking: r === "tracking", isIntake: r === "intake",
+      paceTiles: [
+        { label: "נדרש", value: "0.82", unit: "ק״ג/שבוע", color: t.ink },
+        { label: "בפועל", value: "0.75", unit: "ק״ג/שבוע", color: t.accent },
+        { label: "צפי ליעד", value: "70.3", unit: "ק״ג", color: t.ink }
+      ],
+      statTiles: [
+        { label: "משקל", value: "74.1", delta: "-1.9" },
+        { label: "מותן", value: "84.0", delta: "-2.5" },
+        { label: "ירך", value: "57.4", delta: "-0.8" }
+      ],
+      goTracking: () => this.nav("tracking"), goIntake: () => this.nav("intake"),
+      intakeItems: [
+        ["coffee", "קפה", "עד 3 ביום", dark ? "#5EEAD4" : "#99F6E4"],
+        ["alcohol", "אלכוהול", "שובר צום", dark ? "#FF8FC3" : "#FBCFE8"],
+        ["meat", "בשר", "מנות היום", dark ? "#C7B3FF" : "#C4B5FD"],
+        ["gluten", "גלוטן", "מנות היום", dark ? "#8FD6FF" : "#E4F7F4"]
+      ].map(it => ({
+        label: it[1], note: it[2], chip: it[3],
+        count: (st.intake && st.intake[it[0]]) || 0,
+        inc: () => this.setState(s => ({ intake: Object.assign({}, s.intake, { [it[0]]: ((s.intake && s.intake[it[0]]) || 0) + 1 }) })),
+        dec: () => this.setState(s => ({ intake: Object.assign({}, s.intake, { [it[0]]: Math.max(0, ((s.intake && s.intake[it[0]]) || 0) - 1) }) }))
+      })),
+      bodyStatus: "בצום " + h + " שעות · אינסולין נמוך, שריפת שומן פעילה. קפה שחור לא שובר את הצום; אלכוהול כן.",
+      fasting: true,
+      elapsed: p2(h) + ":" + p2(m) + ":" + p2(sc),
+      elapsedShort: p2(h) + ":" + p2(m),
+      pctText: Math.round(pct * 100) + "%",
+      ringDash: (C * pct).toFixed(1) + " " + C.toFixed(1),
+      ringDashSm: (C2 * pct).toFixed(1) + " " + C2.toFixed(1),
+      phaseLabel: PH[pi][2],
+      toNext: Math.floor(toNextMs / 3600e3) + ":" + p2(Math.floor(toNextMs / 60e3) % 60),
+      segs, slots,
+      lightBg: dark ? "transparent" : t.accentFill,
+      lightColor: dark ? t.muted : t.accentInk,
+      darkBg: dark ? t.accentFill : "transparent",
+      darkColor: dark ? t.accentInk : t.muted,
+      setLight: () => this.setState({ theme: "light" }),
+      setDark: () => this.setState({ theme: "dark" }),
+      goHome: () => this.nav("home"), goDay: () => this.nav("day"),
+      goFasting: () => this.nav("fasting"),
+      goWeek: () => this.nav("week"), goSettings: () => this.nav("settings"),
+      navItems: navDefs.map((n, i) => ({
+        label: n[1], iconBg: iconBgs[i],
+        icon: icon(n[2]),
+        divider: i < navDefs.length - 1 ? t.rule : "transparent",
+        go: () => this.nav(n[0])
+      })),
+      showBack: r !== "home",
+      dayTitle: st.dayOffset === 0 ? "היום" : (st.dayOffset === 1 ? "מחר" : "יום " + DAYS[d.getDay()]),
+      dayName: DAYS[d.getDay()],
+      dayDate: d.getDate() + "." + (d.getMonth() + 1),
+      weekDays: [0,1,2,3,4,5,6].map(off => {
+        const wd = new Date(); wd.setDate(wd.getDate() + off);
+        const sel = off === st.dayOffset;
+        return {
+          name: off === 0 ? "היום" : DAYS[wd.getDay()],
+          date: String(wd.getDate()),
+          bg: sel ? t.head : (dark ? t.inputBg : "#FFFFFF"),
+          nameColor: sel ? (dark ? "#100C1A" : "#E9DFFF") : t.link,
+          dateColor: sel ? (dark ? "#100C1A" : "#FFFFFF") : t.ink,
+          go: () => this.setState({ dayOffset: off })
+        };
+      }),
+      weekRows: weekData.map((w, off) => {
+        const wd = new Date(); wd.setDate(wd.getDate() + off);
+        return {
+          name: off === 0 ? "היום" : DAYS[wd.getDay()],
+          date: String(wd.getDate()),
+          summary: w.summary || "עדיין ריק — לחצו לתכנון",
+          summaryColor: w.summary ? t.ink : t.dim,
+          tags: w.tags, training: w.training,
+          edge: off === 0 ? t.accent : (dark ? t.inputBg : "#EAE3F6"),
+          open: () => { this.setState({ dayOffset: off }); this.nav("day"); }
+        };
+      }),
+      trainingBg: st.training ? t.accentFill : "transparent",
+      trainingMark: st.training ? "✓" : "",
+      cravingBg: st.craving ? (dark ? "#FF8FC3" : "#F0ABFC") : "transparent",
+      cravingMark: st.craving ? "✓" : "",
+      happyBg: st.happy ? (dark ? "#C7B3FF" : "#C4B5FD") : "transparent",
+      happyMark: st.happy ? "✓" : "",
+      pickerOpen: anyPicking,
+      pickerText: st.picking ? "באיזו ארוחה? לחצו על שם הארוחה למטה" : "איפה היה רגע האושר? לחצו על שם הארוחה למטה",
+      showFlag: !(st.craving && st.cravingSlot !== null),
+      toggleTraining: () => this.setState(s => ({ training: !s.training })),
+      toggleCraving: () => this.setState(s => s.craving
+        ? { craving: false, cravingSlot: null, picking: false }
+        : { craving: true, picking: true, happyPicking: false }),
+      toggleHappy: () => this.setState(s => s.happy
+        ? { happy: false, happySlot: null, happyPicking: false }
+        : { happy: true, happyPicking: true, picking: false })
+    };
+  }
+}
+</script>
+</body>
+</html>
