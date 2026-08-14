@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "3.0.0";
+var APP_VERSION = "3.1.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 6;
 
@@ -1199,6 +1199,85 @@ function abstinenceDays(log, keys, nowMs) {
   return days;
 }
 
+/* ============================================================ *
+ *  How you should feel right now — composed, not canned
+ *
+ *  The phase copy in PHASES is static by nature: hour 14 of a fast is hour 14.
+ *  But how it FEELS depends on what is also circulating, and those interact in
+ *  specific, documented ways. This composes the two rather than printing the
+ *  phase text and leaving the reader to combine them.
+ *
+ *  Every line is conditional on state the app actually observes. Nothing here
+ *  fires on a guess, and nothing claims a cause the app cannot see.
+ * ============================================================ */
+function bodyNow(log, fastingHours, nowMs) {
+  var out = [];
+  var h = isFinite(fastingHours) ? fastingHours : null;
+  var caf = caffeineNow(log, nowMs);
+  var cafS = caffeineSince(log, nowMs);
+  var alc = alcoholNow(log, nowMs);
+  var alcS = alcoholSince(log, nowMs);
+  var mt = meatSince(log, nowMs);
+  var gl = glutenSince(log, nowMs);
+
+  /* --- caffeine × fasting --- */
+  if (caf.mg > 60 && h !== null && h >= 12) {
+    out.push({
+      k: "קפאין על בטן ריקה",
+      v: "בערך " + caf.mg + " מ״ג פעילים בזמן שהאינסולין נמוך. קפאין מעלה נוראדרנלין, והצום כבר מעלה אותו בעצמו — לכן יש מי שמרגיש חד ודרוך יותר בשלב הזה, ויש מי שמרגיש רעד קל או דופק מהיר. שניהם נפוצים ואינם סימן שמשהו לא בסדר."
+    });
+  } else if (caf.mg > 60) {
+    out.push({
+      k: "קפאין פעיל",
+      v: "בערך " + caf.mg + " מ״ג בגוף. הערנות שאתה מרגיש עכשיו היא חסימה של אדנוזין, לא אנרגיה שנוספה — היא תיגבה חזרה כשהרמה תרד."
+    });
+  }
+  if (cafS && cafS.hours >= 5 && cafS.hours < 10 && caf.mg <= 60) {
+    out.push({
+      k: "הירידה מהקפה",
+      v: "כחצי מהקפאין כבר פונה והאדנוזין שהצטבר נקשר לקולטנים שהתפנו. זו \"הנפילה\" — עייפות פתאומית שאינה קשורה לצום."
+    });
+  }
+
+  /* --- alcohol × fasting: the interaction that matters most for the goal --- */
+  if (alc.units > 0.05) {
+    out.push({
+      k: "אלכוהול בדם",
+      v: "בערך " + alc.units.toFixed(1) + " מנות עוד לא פונו. כל עוד הן שם, חמצון השומן מדוכא — הגוף שורף אלכוהול לפני שומן." +
+         (h !== null && h >= 12 ? " בצום זה בולט במיוחד: בדיוק בשלב שבו הגוף אמור לעבור לשומן, הוא עסוק במשהו אחר." : "")
+    });
+  } else if (alcS && alcS.hours >= 6 && alcS.hours < 16) {
+    out.push({
+      k: "אחרי אלכוהול",
+      v: "האלכוהול כבר פונה, אבל השינה שאחריו פחות משקמת — הוא מדכא REM בחצי הראשון של הלילה. עייפות היום יכולה לנבוע מזה ולא מהצום." +
+         (h !== null && h >= 10 ? " בנוסף, אלכוהול מייבש, וגם הצום מפריש נתרן — שילוב שמזמין כאב ראש." : "")
+    });
+  }
+
+  /* --- last meal weight vs the switch to fat --- */
+  if (mt && mt.hours < 5 && h !== null && h < 4) {
+    out.push({
+      k: "ארוחה כבדה",
+      v: "בשר מתרוקן מהקיבה לאט — ארוחה עשירה בחלבון ושומן יכולה לשהות 4–5 שעות. תחושת הכובד עכשיו היא זה, לא הצום."
+    });
+  }
+  if (gl && gl.hours < 6) {
+    out.push({
+      k: "אחרי גלוטן",
+      v: "אם יש נפיחות עכשיו, המקור הסביר הוא הפחמימות המותססות (FODMAP) שבחיטה — הן מייצרות גז במעי — ולא חלבון הגלוטן."
+    });
+  }
+
+  /* --- clean state is worth saying too, or the card goes silent on a good day --- */
+  if (!out.length && h !== null && h >= 12) {
+    out.push({
+      k: "מצב נקי",
+      v: "אין קפאין משמעותי, אלכוהול או ארוחה כבדה שמתערבבים עם הצום כרגע. מה שאתה מרגיש עכשיו הוא השלב עצמו."
+    });
+  }
+  return out;
+}
+
 /* True when a headache now has two plausible causes the app can see at once:
  * caffeine falling AND a fast deep enough to be flushing sodium. Surfaced so
  * the user doesn't confidently blame the wrong one. */
@@ -1411,7 +1490,7 @@ window.FT = {
   MEAT_TIMELINE: MEAT_TIMELINE, MEAT_KEYS: MEAT_KEYS,
   CAFFEINE_KEYS: CAFFEINE_KEYS, ALCOHOL_KEYS: ALCOHOL_KEYS,
   hoursSinceLast: hoursSinceLast, timelineStage: timelineStage,
-  headacheAmbiguous: headacheAmbiguous, HEADACHE_NOTE: HEADACHE_NOTE,
+  headacheAmbiguous: headacheAmbiguous, HEADACHE_NOTE: HEADACHE_NOTE, bodyNow: bodyNow,
   AYUR_NOTE: AYUR_NOTE, AYUR_FASTING: AYUR_FASTING, AYUR_ITEMS: AYUR_ITEMS,
   ayurFastingStage: ayurFastingStage, ayurActiveItems: ayurActiveItems,
   CAFFEINE_TIMELINE: CAFFEINE_TIMELINE, ALCOHOL_TIMELINE: ALCOHOL_TIMELINE,

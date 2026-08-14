@@ -1,4 +1,4 @@
-/* FastTrack service worker.
+/* Aviente Health Track service worker.
  *
  * Two jobs: keep the shell available offline, and host the reminder
  * notifications (they only fire from an installed PWA).
@@ -9,7 +9,7 @@
  */
 "use strict";
 
-var VERSION = "ft-3.0.0";
+var VERSION = "ft-3.1.0";
 var SHELL = [
   "./",
   "./index.html",
@@ -109,7 +109,7 @@ self.addEventListener("message", function (e) {
 
     if (d.weighIn) {
       timers.push(setTimeout(function () {
-        self.registration.showNotification("FastTrack", {
+        self.registration.showNotification("Aviente", {
           body: "שקילת בוקר — לפני אוכל ושתייה.",
           tag: "ft-weigh", icon: "./assets/icon-192.png", badge: "./assets/icon-192.png",
           dir: "rtl", lang: "he"
@@ -119,7 +119,7 @@ self.addEventListener("message", function (e) {
 
     if (isFinite(d.fastTargetInMs) && d.fastTargetInMs > 0) {
       timers.push(setTimeout(function () {
-        self.registration.showNotification("FastTrack", {
+        self.registration.showNotification("Aviente", {
           body: "הגעת ליעד הצום.",
           tag: "ft-target", icon: "./assets/icon-192.png", badge: "./assets/icon-192.png",
           dir: "rtl", lang: "he"

@@ -1,18 +1,33 @@
 {
-  "name": "FastTrack — צום ומעקב",
-  "short_name": "FastTrack",
-  "description": "מעקב צום, משקל והיקפים מול יעדים",
+  "name": "Aviente Health Track",
+  "short_name": "Aviente",
+  "description": "מעקב צום, ארוחות, משקל והיקפים",
   "lang": "he",
   "dir": "rtl",
   "start_url": "../index.html",
   "scope": "../",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#101316",
-  "theme_color": "#14171A",
+  "background_color": "#0B0E11",
+  "theme_color": "#0B0E11",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

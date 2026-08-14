@@ -1,4 +1,4 @@
-# FastTrack
+# Aviente Health Track
 
 Personal intermittent-fasting and weight tracker. Hebrew, RTL, phone-first.
 Single user, no accounts, no backend — everything lives in `localStorage` on the
@@ -98,4 +98,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v3.0.0.md` | Human pass |
+| `tests/TEST-PLAN-v3.1.0.md` | Human pass |
