@@ -4,13 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#EAE3F6" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#100C1A" media="(prefers-color-scheme: dark)" />
-<title>FastTrack — צום ומעקב</title>
+<meta name="theme-color" content="#0B0E11" media="(prefers-color-scheme: dark)" />
+<title>Aviente Health Track</title>
 <link rel="manifest" href="assets/manifest.webmanifest" />
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&family=Petit+Formal+Script&family=Cormorant+Garamond:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* ============================================================
      Retro palettes. One design language, two lightness inversions:
@@ -50,45 +50,50 @@
     --gap:12px; --pad:16px; --side:14px;
   }
 
+  /* Duotone night. The retro purple dark measured 1.09 surface-vs-page — the
+     cards were effectively invisible on a phone. This is near-black ground,
+     lifted surfaces (1.21) with a real border (1.62), and ONE accent hue.
+     Ratios are surface / surface2 / page. */
   [data-theme="dark"]{
-    --page:#100C1A; --bg:#100C1A; --surface:#1B1430; --surface2:#271D42; --surface3:#3A2C5E;
-    --border:#271D42; --border2:#3A2C5E; --rule:#3A2C5E;
+    --page:#0B0E11; --bg:#0B0E11; --surface:#1C222A; --surface2:#2B333D; --surface3:#3A444F;
+    --border:#2B333D; --border2:#3A444F; --rule:#3A444F;
 
-    --text:#F2ECFF;    /* 15.32 / 13.59 / 16.72 */
-    --muted:#B9AEDA;   /*  8.52 /  7.56 /  9.30 */
-    --dim:#948AB8;     /*  5.54 /  4.91 /  6.05 */
-    --head:#C7B3FF;    /*  9.52 /  8.44 / 10.39 */
-    --link:#8FD6FF;    /* 11.12 /  9.87 / 12.14 */
-    --flag:#FF8FC3;    /*  8.38 /  7.44 /  9.15 */
-    --accent:#5EEAD4;  /* 11.94 / 10.59 / 13.03 */
-    --accent-hi:#8FF3E3; --onAccent:#100C1A; /* 13.03 on accent */
-    --onHead:#100C1A;  /* 10.39 on head */
+    --text:#F4F7F9;    /* 14.88 / 11.88 / 17.99 */
+    --muted:#B6C2CC;   /*  8.83 /  7.04 / 10.67 */
+    --dim:#98A5B1;     /*  6.37 /  5.08 /  7.70 */
+    --head:#D6F5F0;    /* 13.86 / 11.06 / 16.75 */
+    --link:#A8E2F7;    /* 11.35 /  9.06 / 13.72 */
+    --flag:#F7ADAD;    /*  8.79 /  7.02 / 10.63 */
+    --accent:#5EEAD4;  /* 10.82 /  8.64 / 13.08 */
+    --accent-hi:#8FF3E3; --onAccent:#0B0E11; /* 13.08 on accent */
+    --onHead:#0B0E11;  /* 16.75 on head */
 
-    --flagBg:rgba(255,143,195,.14); --flagBorder:rgba(255,143,195,.40);
-    --pickWash:#221A3C; --ringTrack:#271D42; --chipInk:#100C1A; --tagInk:#F2ECFF;
-    --tagCarb:#4A3E1B; --tagHappy:#3A2C5E; --tagCraving:#5E2C4A;
-    --chipFast:#5EEAD4; --chipDay:#C7B3FF; --chipWeek:#FF8FC3;
-    --chipTrack:#8FD6FF; --chipIntake:#E0C060; --chipSet:#3A2C5E;
-    --up:#FF8FC3; --down:#5EEAD4;
-    --cardShadow:0 1px 0 rgba(199,179,255,.25);
-    --gold:#C7B3FF; --gold-deep:#5EEAD4; --gold-hi:#8FF3E3; --sage:#5EEAD4;
-    --rust:#FF8FC3; --sky:#8FD6FF;
+    --flagBg:rgba(247,173,173,.12); --flagBorder:rgba(247,173,173,.38);
+    --pickWash:#232B34; --ringTrack:#2B333D; --chipInk:#0B0E11; --tagInk:#F4F7F9;
+    /* one hue, three weights — duotone rather than a colour per tag */
+    --tagCarb:#2B4A46; --tagHappy:#28414E; --tagCraving:#4A3336;
+    --chipFast:#5EEAD4; --chipDay:#8FF3E3; --chipWeek:#A8E2F7;
+    --chipTrack:#5EEAD4; --chipIntake:#8FF3E3; --chipSet:#3A444F;
+    --up:#F7ADAD; --down:#5EEAD4;
+    --cardShadow:0 1px 0 rgba(94,234,212,.10);
+    --gold:#D6F5F0; --gold-deep:#5EEAD4; --gold-hi:#8FF3E3; --sage:#5EEAD4;
+    --rust:#F7ADAD; --sky:#A8E2F7;
   }
 
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --page:#100C1A; --bg:#100C1A; --surface:#1B1430; --surface2:#271D42; --surface3:#3A2C5E;
-      --border:#271D42; --border2:#3A2C5E; --rule:#3A2C5E;
-      --text:#F2ECFF; --muted:#B9AEDA; --dim:#948AB8; --head:#C7B3FF; --link:#8FD6FF;
-      --flag:#FF8FC3; --accent:#5EEAD4; --accent-hi:#8FF3E3; --onAccent:#100C1A; --onHead:#100C1A;
-      --flagBg:rgba(255,143,195,.14); --flagBorder:rgba(255,143,195,.40);
-      --pickWash:#221A3C; --ringTrack:#271D42; --chipInk:#100C1A; --tagInk:#F2ECFF;
-      --tagCarb:#4A3E1B; --tagHappy:#3A2C5E; --tagCraving:#5E2C4A;
-      --chipFast:#5EEAD4; --chipDay:#C7B3FF; --chipWeek:#FF8FC3;
-      --chipTrack:#8FD6FF; --chipIntake:#E0C060; --chipSet:#3A2C5E;
-      --up:#FF8FC3; --down:#5EEAD4; --cardShadow:0 1px 0 rgba(199,179,255,.25);
-      --gold:#C7B3FF; --gold-deep:#5EEAD4; --gold-hi:#8FF3E3; --sage:#5EEAD4;
-      --rust:#FF8FC3; --sky:#8FD6FF;
+      --page:#0B0E11; --bg:#0B0E11; --surface:#1C222A; --surface2:#2B333D; --surface3:#3A444F;
+      --border:#2B333D; --border2:#3A444F; --rule:#3A444F;
+      --text:#F4F7F9; --muted:#B6C2CC; --dim:#98A5B1; --head:#D6F5F0; --link:#A8E2F7;
+      --flag:#F7ADAD; --accent:#5EEAD4; --accent-hi:#8FF3E3; --onAccent:#0B0E11; --onHead:#0B0E11;
+      --flagBg:rgba(247,173,173,.12); --flagBorder:rgba(247,173,173,.38);
+      --pickWash:#232B34; --ringTrack:#2B333D; --chipInk:#0B0E11; --tagInk:#F4F7F9;
+      --tagCarb:#2B4A46; --tagHappy:#28414E; --tagCraving:#4A3336;
+      --chipFast:#5EEAD4; --chipDay:#8FF3E3; --chipWeek:#A8E2F7;
+      --chipTrack:#5EEAD4; --chipIntake:#8FF3E3; --chipSet:#3A444F;
+      --up:#F7ADAD; --down:#5EEAD4; --cardShadow:0 1px 0 rgba(94,234,212,.10);
+      --gold:#D6F5F0; --gold-deep:#5EEAD4; --gold-hi:#8FF3E3; --sage:#5EEAD4;
+      --rust:#F7ADAD; --sky:#A8E2F7;
     }
   }
 
@@ -136,8 +141,8 @@
   .statusChip.off{color:var(--dim);} .statusChip.off .dot{background:var(--dim);}
 
   /* ---- cards ---- */
-  .card{background:var(--surface); border-radius:var(--r-card); padding:var(--pad);
-        display:flex; flex-direction:column; gap:12px; box-shadow:var(--cardShadow);}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card);
+        padding:var(--pad); display:flex; flex-direction:column; gap:12px; box-shadow:var(--cardShadow);}
   .cardTitle{font-size:15px; font-weight:600;}
   .cardHead{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
   .hint{font-size:11px; color:var(--dim);}
@@ -297,8 +302,21 @@
 
   /* ================= v3 screens ================= */
   .topBar{display:flex;align-items:center;justify-content:space-between;padding:12px 2px 4px;}
-  .brand{background:none;border:none;color:var(--head,var(--gold));font-size:18px;font-weight:700;
-         letter-spacing:.2px;cursor:pointer;padding:0;font-family:inherit;}
+  /* Latin-only display faces. Scoped to these two lines and nothing else —
+     Cormorant and Petit Formal Script carry no Hebrew glyphs, so any leak
+     into Hebrew text would silently fall back to a system font. */
+  .brand{background:none;border:none;cursor:pointer;padding:0;display:flex;
+         flex-direction:column;align-items:flex-start;gap:1px;direction:ltr;}
+  .brandName{font-family:'Petit Formal Script',cursive;font-size:23px;line-height:1.05;
+             color:var(--head);}
+  .brandSub{font-family:'Cormorant Garamond',serif;font-weight:500;font-size:11px;
+            letter-spacing:3.2px;text-transform:uppercase;color:var(--muted);}
+
+  /* ---- collapsible sections ---- */
+  .fold{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+        background:none;border:none;padding:0;cursor:pointer;color:var(--text);font-family:inherit;}
+  .foldTitle{font-size:15px;font-weight:600;}
+  .foldMark{font-size:12px;color:var(--dim);}
   .topRight{display:flex;gap:8px;align-items:center;}
   .fastPill,.homePill{display:flex;align-items:center;gap:6px;background:var(--surface);
     border:1px solid var(--border2);border-radius:var(--r-pill);padding:5px 11px;
@@ -388,6 +406,9 @@
   .flagBar{background:var(--flagBg);border:1px solid var(--flagBorder);color:var(--flag);
            border-radius:var(--r-tile);padding:8px 12px;font-size:12.5px;}
 
+  .foldBody{display:flex;flex-direction:column;gap:12px;}
+  .foldBody .card{border:none;box-shadow:none;padding:0;background:none;}
+
   /* ---- week ---- */
   .weekList{display:flex;flex-direction:column;gap:8px;}
   .weekRow{display:flex;align-items:center;gap:12px;background:var(--surface);
@@ -399,6 +420,10 @@
   .wD1{font-size:10px;color:var(--muted);} .wD2{font-size:17px;font-weight:700;}
   .wBody{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
   .wSum{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .wLines{display:flex;flex-direction:column;gap:3px;}
+  .wLine{display:flex;align-items:baseline;gap:6px;font-size:12.5px;min-width:0;}
+  .wSlot{flex:0 0 42px;font-size:10.5px;color:var(--link);font-weight:600;}
+  .wText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .wSum.empty{color:var(--dim);}
   .wTags{display:flex;gap:4px;flex-wrap:wrap;}
   .wTrain{flex:0 0 auto;color:var(--accent,var(--gold));font-weight:700;}

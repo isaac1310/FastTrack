@@ -1,4 +1,4 @@
-/* FastTrack — UI layer (v3.0.0).
+/* Aviente Health Track — UI layer (v3.1.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -27,7 +27,8 @@ var view = {
   intakeDate: null,
   route: null,
   dayDate: null,
-  picking: null,        // which tag is waiting for a meal to be tapped
+  picking: null,
+  folds: {},        // which tag is waiting for a meal to be tapped
   slotDrafts: null,     // {date, text:{slotKey:string}} — see restoreFocus()
   draft: null,
   baselineLog: null,
@@ -336,7 +337,9 @@ function renderToast() {
  * ============================================================ */
 function topBar(route) {
   var html = '<div class="topBar full">' +
-    '<button class="brand" data-goto="home">FastTrack</button>' +
+    '<button class="brand" data-goto="home" aria-label="Aviente Health Track">' +
+    '<span class="brandName">Aviente</span>' +
+    '<span class="brandSub">Health Track</span></button>' +
     '<span class="topRight">';
   if (doc.session) {
     html += '<button class="fastPill" data-goto="fasting"><span class="dot"></span>' +
@@ -644,6 +647,17 @@ function statusCard() {
     '<div class="hint">' + (doc.session ? "גבולות טיפוסיים, לא אישיים" : "הערכה") + '</div></div>';
 
   html += intakeSummaryBlock();
+  /* Composed first: how the fast and what you consumed interact right now.
+     The per-phase copy below is the reference; this is the reading. */
+  var nowBlocks = FT.bodyNow(doc.intakeLog, doc.session ? activeHours() : null);
+  if (nowBlocks.length) {
+    html += '<div class="blocks" id="nowBlocks">';
+    nowBlocks.forEach(function (b) {
+      html += '<div class="blk"><div class="k">' + esc(b.k) + '</div>' +
+        '<div class="v">' + esc(b.v) + '</div></div>';
+    });
+    html += '</div>';
+  }
   html += '<div class="blocks" id="liveBlocks">' + liveIntakeBlocks() + '</div>';
 
   if (doc.session) {
@@ -1125,6 +1139,19 @@ function intakeObservationCard() {
 }
 
 
+/* Collapsed by default: the trend is the point of the tracking screen, and
+   everything else is reference you open when you want it. State is per-session
+   in view, not persisted — a fold is a glance, not a preference. */
+function fold(key, title, inner) {
+  var open = !!view.folds[key];
+  return '<div class="card">' +
+    '<button class="fold" data-fold="' + key + '" aria-expanded="' + (open ? "true" : "false") + '">' +
+    '<span class="foldTitle">' + esc(title) + '</span>' +
+    '<span class="foldMark">' + (open ? "סגירה ▲" : "פתיחה ▼") + '</span></button>' +
+    (open ? '<div class="foldBody">' + inner + '</div>' : '') +
+    '</div>';
+}
+
 /* ============================================================ *
  *  Inline SVG icons — no icon font, per the brief.
  *  Stroke uses currentColor so the chip's ink token drives it; drawing an
@@ -1199,7 +1226,6 @@ function homeScreen() {
     ["day", "הארוחות של היום", icoFork(), "day"],
     ["week", "תכנון השבוע", icoCal(), "week"],
     ["tracking", "מעקב ומדידות", icoChart(), "track"],
-    ["intake", "צריכה", icoCup(), "intake"],
     ["settings", "הגדרות", icoGear(), "set"]
   ];
   html += '<div class="tileGrid full">';
@@ -1351,20 +1377,23 @@ function weekScreen() {
     var day = FT.dayDoc(doc.days, d);
     var flags = FT.dayFlags(day);
     var dd = new Date(d + "T12:00:00");
-    var texts = FT.SLOT_KEYS.map(function (k) { return day.slots[k].text.trim(); })
-      .filter(Boolean).join(", ");
+    /* One line per meal, matching the day screen's language. A single joined
+       string collapsed six separate meals into one run-on sentence. */
+    var lines = FT.SLOT_KEYS.filter(function (k) { return day.slots[k].text.trim() !== ""; })
+      .map(function (k) {
+        return '<span class="wLine"><span class="wSlot">' + esc(FT.SLOT_LABELS[k]) +
+          '</span><span class="wText">' + esc(day.slots[k].text.trim()) + '</span>' +
+          day.slots[k].tags.map(function (tg) {
+            return '<span class="tagPill t-' + tg + '">' + esc(FT.dayTag(tg).label) + '</span>';
+          }).join("") + '</span>';
+      });
     html += '<button class="weekRow' + (d === today ? " isToday" : "") + '" data-goday="' + d + '">' +
       '<span class="wDate"><span class="wD1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) +
       '</span><span class="wD2 n">' + dd.getDate() + '</span></span>' +
-      '<span class="wBody"><span class="wSum' + (texts ? "" : " empty") + '">' +
-      (texts ? esc(texts) : "עדיין ריק — לחצו לתכנון") + '</span><span class="wTags">';
-    FT.DAY_TAGS.forEach(function (t) {
-      if (flags.counts[t.key] > 0) {
-        html += '<span class="tagPill t-' + t.key + '">' + esc(t.label) +
-          (flags.counts[t.key] > 1 ? ' <span class="n">' + flags.counts[t.key] + '</span>' : '') + '</span>';
-      }
-    });
-    html += '</span></span>' +
+      '<span class="wBody">' +
+      (lines.length ? '<span class="wLines">' + lines.join("") + '</span>'
+                    : '<span class="wSum empty">עדיין ריק — לחצו לתכנון</span>') +
+      '</span>' +
       (day.training ? '<span class="wTrain">✓</span>' : '') + '</button>';
   });
   html += '</div>';
@@ -1551,10 +1580,18 @@ function render() {
   switch (r.name) {
     case "day":      body = dayScreen(); break;
     case "week":     body = weekScreen(); break;
-    case "fasting":  body = fastingCard() + statusCard() + phaseGuideCard(); break;
-    case "tracking": body = paceCard() + tilesCard() + chartCard() + logCard() +
-                            goalsCard() + historyCard(); break;
-    case "intake":   body = intakeCard() + intakeObservationCard(); break;
+    /* Intake lives on the fasting screen: what you consumed and what the fast
+       is doing are the same question, and splitting them meant reading the
+       answer in two places. */
+    case "fasting":  body = fastingCard() + statusCard() +
+                            fold("intake", "צריכה", intakeCard() + intakeObservationCard()) +
+                            fold("guide", "מדריך השלבים", phaseGuideCard()); break;
+    case "intake":   go("fasting"); body = ""; break;
+    case "tracking": body = chartCard() + paceCard() +
+                            fold("stats", "מדידות ומגמות", tilesCard()) +
+                            fold("log", "רישום ומדידות", logCard()) +
+                            fold("goals", "יעדים", goalsCard()) +
+                            fold("hist", "היסטוריית צומות", historyCard()); break;
     case "settings": body = settingsCard(); break;
     default:         body = homeScreen(); break;
   }
@@ -1590,6 +1627,15 @@ function tick() {
   /* Live intake estimates decay whether or not a fast is running, so they are
      patched before the early return. innerHTML here is safe: the block holds
      no inputs. */
+  var nb = document.getElementById("nowBlocks");
+  if (nb) {
+    var nbHtml = "";
+    FT.bodyNow(doc.intakeLog, doc.session ? activeHours() : null).forEach(function (b) {
+      nbHtml += '<div class="blk"><div class="k">' + esc(b.k) + '</div>' +
+        '<div class="v">' + esc(b.v) + '</div></div>';
+    });
+    if (nb.innerHTML !== nbHtml) nb.innerHTML = nbHtml;
+  }
   var lb = document.getElementById("liveBlocks");
   if (lb) {
     var next = liveIntakeBlocks();
@@ -1693,6 +1739,13 @@ function wire() {
     };
   });
   on("cancelPick", function () { view.picking = null; render(); });
+  each("[data-fold]", function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute("data-fold");
+      view.folds[k] = !view.folds[k];
+      render();
+    };
+  });
   each("[data-slot]", function (b) {
     b.onclick = function () {
       if (!view.picking) return;

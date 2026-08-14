@@ -1,8 +1,8 @@
-# FastTrack — human test plan v3.0.0
+# FastTrack — human test plan v3.1.0
 
 Five minutes. Judgement only — everything a machine can assert lives in
 `selftest.js`. **Check the version footer first:** the bottom of the app must
-read `v3.0.0`. If it doesn't, you're on a cached page and every result below is
+read `v3.1.0`. If it doesn't, you're on a cached page and every result below is
 about the wrong build.
 
 Run the machine suite first. Red means stop:
@@ -128,11 +128,11 @@ reason is a failure.
 ✅ / ❌ per numbered step. Anything ❌ that carries a ⚠️ is a regression of a bug
 that already shipped once — treat it as blocking.
 
-Version footer checked: ☐ `v3.0.0`
+Version footer checked: ☐ `v3.1.0`
 
 ---
 
-## 10 · Intake ⚠️ *new in v3.0.0*
+## 10 · Intake ⚠️ *new in v3.1.0*
 
 27. Open the צריכה card and tap `+` on **קפה שחור** while a fast is running.
     **Expect:** the count goes up and **nothing else happens** — no prompt.
@@ -171,7 +171,7 @@ Version footer checked: ☐ `v3.0.0`
     upgrades a v2 document in place — but this is the check that matters most,
     because the failure mode is silent data loss.
 
-## 12 · Live body status ⚠️ *new in v3.0.0*
+## 12 · Live body status ⚠️ *new in v3.1.0*
 
 36. With no coffee or alcohol logged today and no fast running, look for the
     "מה קורה עכשיו בגוף" card.
@@ -198,7 +198,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** the daily and weekly counts include it, but the live caffeine
     figure does **not** move. A dose with no real time can't be circulating now.
 
-## 13 · Since-last-dose ⚠️ *new in v3.0.0*
+## 13 · Since-last-dose ⚠️ *new in v3.1.0*
 
 43. Log a coffee, then look at "מה קורה עכשיו בגוף".
     **Expect:** a heading like `קפאין · לפני 3 דק׳ · ספיגה`, with what's
@@ -226,7 +226,7 @@ Version footer checked: ☐ `v3.0.0`
 50. With no coffee or alcohol in the last 3 days and no fast running.
     **Expect:** the card is absent entirely. Nothing to say.
 
-## 14 · All three at a glance ⚠️ *new in v3.0.0*
+## 14 · All three at a glance ⚠️ *new in v3.1.0*
 
 51. Open the app with coffee logged today, meat a few days back and alcohol
     over a week back.
@@ -262,7 +262,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** ⚠️ it does **not** move. A past-day entry has no real time, so
     it cannot be circulating now.
 
-## 16 · The backup notice ⚠️ *changed in v3.0.0*
+## 16 · The backup notice ⚠️ *changed in v3.1.0*
 
 60. With data logged and no recent export, look for the "data is only on this
     device" banner and tap "הבנתי".
@@ -273,7 +273,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** the backup status is still there and still says plainly that
     you haven't exported. Dismissing the banner must not hide the fact.
 
-## 17 · Save button for past days ⚠️ *new in v3.0.0*
+## 17 · Save button for past days ⚠️ *new in v3.1.0*
 
 63. Set the intake date to a past day and tap + on any item.
     **Expect:** the count changes on screen, the stepper gets a gold ring, and
@@ -287,7 +287,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** no save button at all — today writes on each tap, because the
     live status reacts immediately and proves it.
 
-## 18 · Meat as a streak ⚠️ *reframed in v3.0.0*
+## 18 · Meat as a streak ⚠️ *reframed in v3.1.0*
 
 67. With meat logged several days ago, check the summary row.
     **Expect:** "בשר · לפני 6 ימים · רצף ארוך נקי · 5 ימים נקיים".
@@ -300,7 +300,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** it raises protein for lean mass in a deficit and admits the app
     can't see fish, eggs, dairy or legumes.
 
-## 19 · Ayurvedic lens ⚠️ *new in v3.0.0*
+## 19 · Ayurvedic lens ⚠️ *new in v3.1.0*
 
 70. Look for "מבט איורוודי" and open it.
     **Expect:** its own card, visually distinct (blue-tinted), collapsed by
@@ -317,7 +317,7 @@ Version footer checked: ☐ `v3.0.0`
     **Expect:** none. Descriptive only — no herbs, no supplements, no
     treatment advice.
 
-## 20 · One body section ⚠️ *v3.0.0*
+## 20 · One body section ⚠️ *v3.1.0*
 
 74. There is exactly one body card: "מה קורה עכשיו בגוף". The "מבט איורוודי"
     and "מה זה עושה לגוף" cards are gone.
@@ -333,14 +333,14 @@ Version footer checked: ☐ `v3.0.0`
 79. Coffee with milk is gone from the steppers; old entries still count as
     coffee (check a historical day).
 
-## 21 · Cancel for today ⚠️ *v3.0.0*
+## 21 · Cancel for today ⚠️ *v3.1.0*
 
 80. Tap + on any item today. **Expect:** a "ביטול השינויים של היום" button
     appears.
 81. Tap it. **Expect:** today's counts return to what they were when the app
     was opened, and the button disappears.
 
-## 22 · Gluten ⚠️ *v3.0.0*
+## 22 · Gluten ⚠️ *v3.1.0*
 
 82. Gluten appears as a fourth stepper item, a fourth summary row, and a block
     in the body card.
@@ -353,7 +353,7 @@ Version footer checked: ☐ `v3.0.0`
 
 ---
 
-# v3.0.0 — new screens and themes
+# v3.1.0 — new screens and themes
 
 **Step 0, before anything: export a backup.** Six migrations have run on your
 data and v3 adds a seventh.
@@ -396,3 +396,51 @@ data and v3 adds a seventh.
 98. Visit every tile from home. **Expect:** goals add/edit/delete, fast history,
     reminders, backup, the Ayurvedic lines, the intake-vs-trend table, the
     since-last rows and the measurement protocol are all still reachable.
+
+---
+
+# v3.1.0
+
+## 27 · Branding
+
+99. Top bar reads **Aviente / HEALTH TRACK** in script + spaced caps.
+    ⚠️ Check any Hebrew nearby is still Rubik — those two faces carry no Hebrew
+    and must never leak.
+100. Reinstall to the home screen. **Expect:** the new turquoise mark, and the
+     name "Aviente".
+
+## 28 · Dark mode ⚠️ *the reported bug*
+
+101. Settings → לילה, then look at the home screen **on the phone, not a
+     desktop**. **Expect:** cards clearly separate from the background. This
+     measured 1.09 before — effectively invisible.
+102. One accent colour only (turquoise). No purple/pink/yellow spread.
+
+## 29 · Tracking screen
+
+103. Open מעקב ומדידות. **Expect:** the trend chart is first and open.
+104. Everything below it is collapsed. Tap one — it opens; tap again — closes.
+
+## 30 · Weight sync ⚠️
+
+105. On היום, enter a weight and save. Go to מעקב. **Expect:** the same number
+     is in the chart and the pace figures.
+
+## 31 · Week screen
+
+106. Plan two different meals on a day, then open השבוע. **Expect:** each meal
+     on its own line with its slot name — not one run-on sentence.
+
+## 32 · Intake merged
+
+107. Home has no צריכה tile; it lives inside הצום שלי, collapsed.
+108. Visiting `#/intake` directly redirects to the fasting screen.
+
+## 33 · Body state is dynamic ⚠️
+
+109. Mid-fast with a coffee in the last hour. **Expect:** a line about caffeine
+     on an empty stomach.
+110. Log a drink. **Expect:** the text changes to alcohol suppressing fat
+     oxidation — different words, not the same canned paragraph.
+111. Fast with nothing consumed. **Expect:** "מצב נקי" — it says the state is
+     the fast itself rather than going silent.
