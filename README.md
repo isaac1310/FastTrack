@@ -44,6 +44,15 @@ device and leaves it only through a JSON export you trigger yourself.
   or dairy, and says so instead of implying a shortfall it can't observe.
 - **Pace** — required vs. actual kg/week and a projection to the next goal.
 
+## Screens
+
+Home hub with hash routing, then: **היום** (six meal slots as a ruled notepad,
+weight, training, repeatable tags with daily-limit flags), **השבוע** (seven days
+ahead, same store), plus fasting, tracking, intake and settings.
+
+Two themes in one retro language — light is saturated ink on pastel ground,
+dark is pastel ink on deep ground, same hues in both.
+
 ## What it deliberately does not do
 
 Count calories. Intake tracking is three items, not a food diary — enough to
@@ -89,4 +98,4 @@ desktop. See `CLAUDE.md` for what counts as a pass.
 | `sw.js` | Service worker: offline shell + reminders |
 | `build.mjs` | Build |
 | `DESIGN-BRIEF.md` | Design contract and hard constraints |
-| `tests/TEST-PLAN-v2.8.0.md` | Human pass |
+| `tests/TEST-PLAN-v3.0.0.md` | Human pass |
