@@ -1274,9 +1274,14 @@ function dayScreen() {
     '<button class="btn accent sm" id="saveDayWeight">שמירה</button></div>';
 
   // ---- training ----
-  html += '<div class="dayRow"><label class="chk"><input type="checkbox" id="dayTraining"' +
-    (day.training ? " checked" : "") + '/><span class="chkBox"></span>' +
-    '<span>אימון</span></label></div>';
+  /* An explicit button, NOT a <label><input type=checkbox>. Nesting the input
+     inside its own label makes the label forward a second synthetic click back
+     to the input, toggling it straight back — one tap, no net change, and no
+     change event. It looked correct in code and only showed up on a real tap. */
+  html += '<div class="dayRow">' +
+    '<button class="chk" id="dayTraining" role="checkbox" aria-checked="' +
+    (day.training ? "true" : "false") + '">' +
+    '<span class="chkBox"></span><span>אימון</span></button></div>';
 
   // ---- tag buttons: same flow for all three ----
   html += '<div class="tagBar">';
@@ -1673,10 +1678,12 @@ function wire() {
     var ok = persist(); render();
     showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה", ok ? function () { doc.weights = before; } : null);
   });
-  on("dayTraining", function (e) {
-    doc.days = FT.setTraining(doc.days, currentDayDate(), e.target.checked);
+  on("dayTraining", function () {
+    var date = currentDayDate();
+    var now = FT.dayDoc(doc.days, date).training;
+    doc.days = FT.setTraining(doc.days, date, !now);
     persist(); render();
-  }, "change");
+  });
 
   each("[data-picktag]", function (b) {
     b.onclick = function () {

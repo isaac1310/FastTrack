@@ -351,14 +351,14 @@
   .numIn{width:5.5em;text-align:center;}
   .unit{font-size:12px;color:var(--muted);}
   .btn.sm{padding:8px 14px;font-size:13px;}
-  .chk{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;}
-  .chk input{position:absolute;opacity:0;width:0;height:0;}
+  .chk{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;
+       background:none;border:none;padding:4px 0;color:var(--text);font-family:inherit;}
   .chkBox{width:22px;height:22px;border-radius:7px;border:2px solid var(--border2);
           display:inline-block;position:relative;flex:0 0 auto;}
-  .chk input:checked + .chkBox{background:var(--accent,var(--gold));border-color:var(--accent,var(--gold));}
-  .chk input:checked + .chkBox::after{content:"";position:absolute;inset-inline-start:6px;top:2px;
-    width:5px;height:10px;border:solid var(--onAccent,#14171A);border-width:0 2px 2px 0;transform:rotate(45deg);}
-  .chk input:focus-visible + .chkBox{outline:2px solid var(--accent,var(--gold));outline-offset:2px;}
+  .chk[aria-checked="true"] .chkBox{background:var(--accent);border-color:var(--accent);}
+  .chk[aria-checked="true"] .chkBox::after{content:"";position:absolute;inset-inline-start:6px;top:2px;
+    width:5px;height:10px;border:solid var(--onAccent);border-width:0 2px 2px 0;transform:rotate(45deg);}
+  .chk:focus-visible .chkBox{outline:2px solid var(--accent);outline-offset:2px;}
   .tagBar{display:flex;gap:6px;flex-wrap:wrap;}
   .tagBtn{border:1px solid var(--border2);background:var(--surface2);color:var(--text);
           border-radius:var(--r-pill);padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit;}

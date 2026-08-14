@@ -1260,6 +1260,28 @@
       if (!okCaret) return "caret moved across render()";
       return okVal ? true : "the draft text was lost across render()";
     });
+    check("training toggles on a real CLICK, not just a dispatched change", function () {
+      /* Shipped broken in v3.0.0: the checkbox was nested in its own <label>,
+         so the label forwarded a second click back to it and the toggle
+         cancelled itself. The old check dispatched `change` directly, which
+         bypassed exactly the broken path. Click the element, like a thumb. */
+      if (!inApp) return skip("not running inside the app page");
+      if (typeof render !== "function" || typeof currentDayDate !== "function") {
+        return skip("render/currentDayDate not exposed on this page");
+      }
+      var before = location.hash;
+      location.hash = "#/day"; render();
+      var el = document.getElementById("dayTraining");
+      if (!el) { location.hash = before; render(); return skip("day screen has no training control"); }
+      var was = FT.dayDoc(doc.days, currentDayDate()).training;
+      el.click();
+      var mid = FT.dayDoc(doc.days, currentDayDate()).training;
+      document.getElementById("dayTraining").click();
+      var back = FT.dayDoc(doc.days, currentDayDate()).training;
+      location.hash = before; render();
+      if (mid === was) return "one click did not change the stored value";
+      return back === was ? true : "a second click did not toggle it back";
+    });
     check("every theme token pair meets 4.5:1, computed not judged", function () {
       if (!inApp) return skip("not running inside the app page");
       var cs = getComputedStyle(document.documentElement);
