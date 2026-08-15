@@ -12,7 +12,7 @@ node build.mjs
 ```
 
 Then open the app and run `__selftest()` in the console **at both widths**
-(412px and desktop). Expect `178 passed, 0 failed, 1 skipped` at each — the one
+(412px and desktop). Expect `180 passed, 0 failed, 1 skipped` at each — the one
 skip is the opposite width's layout check and must say so. A skip with no
 reason is a failure.
 

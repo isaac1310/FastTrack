@@ -21,6 +21,7 @@
      surface / surface2 / page. Recompute before changing any value.
      ============================================================ */
   :root, [data-theme="light"]{
+    color-scheme: light;
     --page:#EAE3F6; --bg:#EAE3F6; --surface:#FFFFFF; --surface2:#E4F7F4; --surface3:#F3EDFB;
     --border:#DCD3F0; --border2:#DCD3F0; --rule:#DCD3F0;
 
@@ -55,6 +56,7 @@
      lifted surfaces (1.21) with a real border (1.62), and ONE accent hue.
      Ratios are surface / surface2 / page. */
   [data-theme="dark"]{
+    color-scheme: dark;
     --page:#0B0E11; --bg:#0B0E11; --surface:#1C222A; --surface2:#2B333D; --surface3:#3A444F;
     --border:#2B333D; --border2:#3A444F; --rule:#3A444F;
 
@@ -82,6 +84,7 @@
 
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
+      color-scheme: dark;
       --page:#0B0E11; --bg:#0B0E11; --surface:#1C222A; --surface2:#2B333D; --surface3:#3A444F;
       --border:#2B333D; --border2:#3A444F; --rule:#3A444F;
       --text:#F4F7F9; --muted:#B6C2CC; --dim:#98A5B1; --head:#D6F5F0; --link:#A8E2F7;
@@ -197,6 +200,17 @@
     background:var(--surface2); border:1px solid var(--border2); color:var(--text);
     font-family:inherit; font-size:14px; border-radius:var(--r-ctl); padding:10px 12px;
     outline:none; width:100%; direction:ltr; text-align:right;
+  }
+  /* A date field has fixed-width internals (dd/mm/yyyy + the picker glyph). In a
+     flex row it must not shrink below them, or it collapses to the icon alone
+     and there is nothing left to tap. */
+  input[type=date],input[type=time],input[type=datetime-local]{
+    text-align:left; min-width:9.5em; flex:1 1 auto; min-height:44px;
+  }
+  /* The indicator is the reliable tap target on Android; make it big and
+     visible rather than a dark glyph on a dark field. */
+  input[type=date]::-webkit-calendar-picker-indicator{
+    opacity:1; cursor:pointer; padding:6px; margin-inline-start:4px;
   }
   input[type=text]{direction:rtl;}
   input::placeholder{color:var(--dim);}

@@ -4,8 +4,9 @@
     {
       "name": "fasttrack",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "serve", "-l", "4317", "."],
-      "port": 4317
+      "runtimeArgs": ["-y", "serve", "."],
+      "port": 4317,
+      "autoPort": true
     }
   ]
 }

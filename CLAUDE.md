@@ -116,7 +116,7 @@ node build.mjs
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run **four**
 combinations: 412px and desktop, each in light and dark. A run in one theme is
-never evidence about the other. Expect `178 passed, 0 failed, 1 skipped` at each; the skip is the
+never evidence about the other. Expect `180 passed, 0 failed, 1 skipped` at each; the skip is the
 opposite width's layout check and must state its reason. **A skip without a
 reason is a failure, and a run with skips is never "all passed."**
 

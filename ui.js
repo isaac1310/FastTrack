@@ -1703,6 +1703,17 @@ function on(id, fn, ev) { var e = document.getElementById(id); if (e) e.addEvent
 function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
 
 function wire() {
+  /* Android Chrome only opens the picker reliably from the small indicator
+     glyph. showPicker() makes the whole field a tap target. It throws when
+     unsupported or without user activation, so it is guarded and never
+     replaces the native behaviour — it only adds to it. */
+  each("input[type=date]", function (el) {
+    el.onclick = function () {
+      if (typeof el.showPicker !== "function") return;
+      try { el.showPicker(); } catch (e) { /* fall back to native */ }
+    };
+  });
+
   // ---- navigation ----
   each("[data-goto]", function (b) {
     b.onclick = function () { go(b.getAttribute("data-goto")); };

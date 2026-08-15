@@ -1282,6 +1282,36 @@
       if (mid === was) return "one click did not change the stored value";
       return back === was ? true : "a second click did not toggle it back";
     });
+    check("color-scheme matches the theme, so native controls are visible", function () {
+      /* Shipped broken in v3.1: color-scheme was `normal` under a dark theme,
+         so the browser drew date-input internals and the picker popup in the
+         LIGHT scheme — a dark glyph on a dark field. The field looked empty
+         and the picker looked dead. Nothing in the app's own CSS shows this. */
+      if (!inApp) return skip("not running inside the app page");
+      var cs = getComputedStyle(document.documentElement).colorScheme;
+      var attr = document.documentElement.getAttribute("data-theme");
+      if (!attr) return skip("theme is on auto — the media query governs it");
+      if (cs === "normal") return "color-scheme is 'normal'; native controls will not follow the theme";
+      return cs.indexOf(attr) !== -1 ? true : "color-scheme is '" + cs + "' but theme is '" + attr + "'";
+    });
+    check("date fields cannot collapse below their own internals", function () {
+      /* dd/mm/yyyy plus the picker glyph has an intrinsic width. In a flex row
+         a date input would shrink past it, leaving only the icon — nothing to
+         tap and nothing readable. */
+      if (!inApp) return skip("not running inside the app page");
+      if (typeof render !== "function") return skip("render not exposed on this page");
+      var before = location.hash;
+      location.hash = "#/tracking";
+      if (typeof view !== "undefined") { view.folds = { goals: true }; view.showGoalForm = true; }
+      render();
+      var d = document.querySelector('input[type="date"]');
+      if (!d) { location.hash = before; render(); return skip("no date field rendered on this route"); }
+      var w = d.getBoundingClientRect().width;
+      var h = d.getBoundingClientRect().height;
+      location.hash = before; render();
+      if (w < 120) return "date field is only " + Math.round(w) + "px wide — collapsed";
+      return h >= 40 ? true : "date field is only " + Math.round(h) + "px tall — under the tap-target floor";
+    });
     check("every theme token pair meets 4.5:1, computed not judged", function () {
       if (!inApp) return skip("not running inside the app page");
       var cs = getComputedStyle(document.documentElement);
