@@ -1943,7 +1943,14 @@ function wire() {
     };
   });
 
-  each("[data-theme]", function (b) {
+  /* button[data-theme], NOT [data-theme]: applyTheme() puts data-theme on
+     <html> itself, so the bare attribute selector matched the ROOT element
+     and installed this handler on it. Every click anywhere in the app then
+     bubbled to <html> and triggered a full render() — which destroyed any
+     open native picker within milliseconds of the same click opening it.
+     That single character made every date/time picker in the app appear
+     dead on the phone, across three releases of fixing the wrong thing. */
+  each("button[data-theme]", function (b) {
     b.onclick = function () {
       doc.profile.theme = b.getAttribute("data-theme");
       persist(); applyTheme(); render();

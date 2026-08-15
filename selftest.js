@@ -1294,6 +1294,19 @@
       if (cs === "normal") return "color-scheme is 'normal'; native controls will not follow the theme";
       return cs.indexOf(attr) !== -1 ? true : "color-scheme is '" + cs + "' but theme is '" + attr + "'";
     });
+    check("no click handler on <html> or <body> — a bubbled render kills pickers", function () {
+      /* wire() once selected [data-theme], which matches the <html> element
+         because applyTheme() sets data-theme on the root. That installed a
+         theme handler on <html>, so EVERY click bubbled up and triggered a
+         full render(), destroying any open native picker within the same
+         click. Three releases fixed other things while this stayed. */
+      if (!inApp) return skip("not running inside the app page");
+      if (typeof document.documentElement.onclick === "function")
+        return "<html> has an onclick handler; every click in the app will bubble to it";
+      if (typeof document.body.onclick === "function")
+        return "<body> has an onclick handler; every click in the app will bubble to it";
+      return true;
+    });
     check("every picker input is wired, not just type=date", function () {
       /* Both earlier picker fixes were scoped to input[type=date]. The fasting
          start editor (#startEdit) is a datetime-local, so it got neither the

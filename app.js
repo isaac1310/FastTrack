@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "3.1.5";
+var APP_VERSION = "3.1.6";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 6;
 

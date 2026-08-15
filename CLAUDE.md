@@ -121,6 +121,15 @@ Full list in `DESIGN-BRIEF.md` §3. The four that have already caused shipped bu
    so production served the newest code while reporting `3.1.0` — which read
    as a failed deploy and sent a debugging session after Vercel for nothing.
    Bump the constant in the same commit as the change.
+21. **Attribute selectors in `wire()` must not be able to match `<html>` or
+   `<body>`.** `each("[data-theme]", …)` matched the root element, because
+   `applyTheme()` sets `data-theme` on `<html>`. That installed a
+   theme-switch handler on the root, so EVERY click anywhere bubbled up and
+   triggered a full `render()` — destroying any open native picker within
+   milliseconds of the same click opening it. Three releases fixed real but
+   secondary problems while this one character stayed. Scope wiring
+   selectors to an element type (`button[data-theme]`) or to `#app`, and
+   keep the selftest check that asserts the root carries no click handler.
 
 Contrast: every text colour is annotated with its measured ratio in the
 stylesheet. Compute before changing one — do not judge by eye.
@@ -133,13 +142,12 @@ node build.mjs
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run **four**
 combinations: 412px and desktop, each in light and dark. A run in one theme is
-never evidence about the other. Expect `0 failed` at each, with `182 passed,
-1 skipped` at desktop and `181 passed, 2 skipped` at 412px. One skip is always
-the opposite width's layout check. The second, at phone width, is the
-picker-wiring check when the route happens to render no picker input — to see
-it actually run, open the fasting start editor first. Every skip must state
-its reason. **A skip without a reason is a failure, and a run with skips is
-never "all passed."**
+never evidence about the other. Expect `0 failed` at each; the suite is 184
+checks. Two checks legitimately skip by context: the opposite width's layout
+check (always exactly one of the two), and the picker-wiring check when the
+route renders no picker input — to see that one actually run, open the
+fasting start editor first. Every skip must state its reason. **A skip
+without a reason is a failure, and a run with skips is never "all passed."**
 
 Then the human pass: `tests/TEST-PLAN-v3.1.0.md`.
 
