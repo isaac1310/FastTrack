@@ -104,6 +104,23 @@ Full list in `DESIGN-BRIEF.md` §3. The four that have already caused shipped bu
    which biases its slope toward zero — fitting it reported −0.46 kg/week on a
    true −0.91, i.e. "behind pace" while exactly on pace. `smoothWeights()` is
    presentation only; `trendFit()` is the number.
+18. **A fix aimed at "the date picker" must cover every picker TYPE.** Both the
+   `showPicker` binding and the `::-webkit-calendar-picker-indicator` styling
+   were first written as `input[type=date]`, which silently excludes
+   `datetime-local` and `time`. The fasting start editor (`#startEdit`) is a
+   `datetime-local`, so the one field the user actually reported stayed broken
+   through two "fixes". Select all three types, and assert by type.
+19. **Controls must opt out of text selection.** With no `user-select:none` a
+   lingering tap on Android turns a button's Hebrew label into a text
+   selection and the click never fires. Since the date fields sit behind
+   reveal buttons, a swallowed tap there means the field is never rendered at
+   all — which presents as "the date picker is broken", not "the button is".
+   Inputs keep `user-select:text`; the caret is not optional.
+20. **A git tag is not a release.** `APP_VERSION` in `app.js` is the only thing
+   the running app reports. v3.1.1 and v3.1.2 were tagged without bumping it,
+   so production served the newest code while reporting `3.1.0` — which read
+   as a failed deploy and sent a debugging session after Vercel for nothing.
+   Bump the constant in the same commit as the change.
 
 Contrast: every text colour is annotated with its measured ratio in the
 stylesheet. Compute before changing one — do not judge by eye.
@@ -116,9 +133,13 @@ node build.mjs
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run **four**
 combinations: 412px and desktop, each in light and dark. A run in one theme is
-never evidence about the other. Expect `180 passed, 0 failed, 1 skipped` at each; the skip is the
-opposite width's layout check and must state its reason. **A skip without a
-reason is a failure, and a run with skips is never "all passed."**
+never evidence about the other. Expect `0 failed` at each, with `182 passed,
+1 skipped` at desktop and `181 passed, 2 skipped` at 412px. One skip is always
+the opposite width's layout check. The second, at phone width, is the
+picker-wiring check when the route happens to render no picker input — to see
+it actually run, open the fasting start editor first. Every skip must state
+its reason. **A skip without a reason is a failure, and a run with skips is
+never "all passed."**
 
 Then the human pass: `tests/TEST-PLAN-v3.1.0.md`.
 

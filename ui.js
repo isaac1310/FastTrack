@@ -1707,7 +1707,11 @@ function wire() {
      glyph. showPicker() makes the whole field a tap target. It throws when
      unsupported or without user activation, so it is guarded and never
      replaces the native behaviour — it only adds to it. */
-  each("input[type=date]", function (el) {
+  /* Every picker type, not just `date`. Scoping this to input[type=date]
+     shipped the fasting start editor (#startEdit, a datetime-local) without
+     any of it — home → my fast → edit start was the one path where no
+     picker opened at all. */
+  each("input[type=date],input[type=datetime-local],input[type=time]", function (el) {
     el.onclick = function () {
       if (typeof el.showPicker !== "function") return;
       try { el.showPicker(); } catch (e) { /* fall back to native */ }

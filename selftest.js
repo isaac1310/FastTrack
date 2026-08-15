@@ -1294,6 +1294,23 @@
       if (cs === "normal") return "color-scheme is 'normal'; native controls will not follow the theme";
       return cs.indexOf(attr) !== -1 ? true : "color-scheme is '" + cs + "' but theme is '" + attr + "'";
     });
+    check("every picker input is wired, not just type=date", function () {
+      /* Both earlier picker fixes were scoped to input[type=date]. The fasting
+         start editor (#startEdit) is a datetime-local, so it got neither the
+         showPicker binding nor the indicator styling — home → my fast → edit
+         start opened no picker at all. Assert by TYPE, so adding a time field
+         somewhere cannot silently repeat this. */
+      if (!inApp) return skip("not running inside the app page");
+      var els = document.querySelectorAll(
+        "input[type=date],input[type=datetime-local],input[type=time]");
+      if (!els.length) return skip("no picker input on this route");
+      for (var i = 0; i < els.length; i++) {
+        if (typeof els[i].onclick !== "function")
+          return "a " + els[i].type + " input (#" + (els[i].id || "?") +
+                 ") has no click handler; tapping the field will not open the picker";
+      }
+      return true;
+    });
     check("buttons opt out of text selection, so a tap is not eaten", function () {
       /* On Android a tap that lingers over selectable text becomes a text
          selection and the click never fires. Every control here is a Hebrew

@@ -209,7 +209,9 @@
   }
   /* The indicator is the reliable tap target on Android; make it big and
      visible rather than a dark glyph on a dark field. */
-  input[type=date]::-webkit-calendar-picker-indicator{
+  input[type=date]::-webkit-calendar-picker-indicator,
+  input[type=datetime-local]::-webkit-calendar-picker-indicator,
+  input[type=time]::-webkit-calendar-picker-indicator{
     opacity:1; cursor:pointer; padding:6px; margin-inline-start:4px;
   }
   /* ---- touch hardening ----
