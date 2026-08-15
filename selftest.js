@@ -1294,6 +1294,29 @@
       if (cs === "normal") return "color-scheme is 'normal'; native controls will not follow the theme";
       return cs.indexOf(attr) !== -1 ? true : "color-scheme is '" + cs + "' but theme is '" + attr + "'";
     });
+    check("buttons opt out of text selection, so a tap is not eaten", function () {
+      /* On Android a tap that lingers over selectable text becomes a text
+         selection and the click never fires. Every control here is a Hebrew
+         word inside a button, so this hit ALL of them: the reveal buttons
+         ("+ הוספה", "רישום לתאריך אחר") never opened, and the date fields
+         behind them were therefore never rendered at all. Inputs must keep
+         selection — caret placement in a text field is not optional. */
+      if (!inApp) return skip("not running inside the app page");
+      var b = document.querySelector("button");
+      if (!b) return skip("no button rendered on this route");
+      var bs = getComputedStyle(b);
+      var sel = bs.userSelect || bs.webkitUserSelect;
+      if (sel !== "none") return "button user-select is '" + sel + "'; a lingering tap will select it instead of clicking";
+      if (bs.touchAction.indexOf("manipulation") === -1)
+        return "button touch-action is '" + bs.touchAction + "'; taps wait for a possible double-tap zoom";
+      var i = document.querySelector("input[type=text],input[type=number]");
+      if (i) {
+        var is = getComputedStyle(i);
+        var isel = is.userSelect || is.webkitUserSelect;
+        if (isel === "none") return "inputs inherited user-select:none; the caret cannot be placed";
+      }
+      return true;
+    });
     check("date fields cannot collapse below their own internals", function () {
       /* dd/mm/yyyy plus the picker glyph has an intrinsic width. In a flex row
          a date input would shrink past it, leaving only the icon — nothing to

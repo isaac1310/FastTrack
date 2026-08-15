@@ -212,6 +212,23 @@
   input[type=date]::-webkit-calendar-picker-indicator{
     opacity:1; cursor:pointer; padding:6px; margin-inline-start:4px;
   }
+  /* ---- touch hardening ----
+     Android Chrome turns a tap that lingers into a text selection when the
+     target's label is selectable text: the selection handles appear and the
+     click never fires. Every control here is a Hebrew word inside a button,
+     which is exactly that shape — and a swallowed tap on "+ הוספה" or
+     "רישום לתאריך אחר" means the date field is never even rendered, which
+     reads as "none of the date pickers work".
+     touch-action:manipulation additionally drops the double-tap-zoom wait so
+     the first tap activates. Inputs must KEEP selection — caret placement in
+     a text field is not optional. */
+  button,.btn,.chip,.fold,.linkBtn,[role=checkbox],[data-fold],[data-goto],[data-goday]{
+    -webkit-user-select:none; user-select:none;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+  }
+  input,textarea{-webkit-user-select:text; user-select:text; touch-action:manipulation;}
+
   input[type=text]{direction:rtl;}
   input::placeholder{color:var(--dim);}
   input:focus{border-color:var(--gold);}
