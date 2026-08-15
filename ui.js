@@ -199,8 +199,33 @@ function restoreToday() {
 /* ---------- PWA + reminders ---------- */
 function registerSW() {
   if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
-  navigator.serviceWorker.register("sw.js").then(function () {
+
+  /* Whether a worker was already in charge when this page loaded. On a first
+     ever visit there is none, and the install that follows is not a version
+     change — reloading for it would be a pointless flash. */
+  var hadController = !!navigator.serviceWorker.controller;
+  var reloading = false;
+
+  /* A new worker taking over means the code on disk changed under us: the
+     page is now running a mix of old scripts and a new cache. Reload once so
+     the whole app is the new version.
+     This is what was missing. sw.js is network-first precisely so a deploy
+     lands on the next load, but nothing ever asked the browser to re-check
+     sw.js — so an installed PWA kept serving an old worker, and with it old
+     app code, indefinitely. Two shipped fixes were invisible on the phone for
+     exactly this reason. */
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker.register("sw.js").then(function (reg) {
     scheduleReminders();
+    // Ask the browser to re-check sw.js now, rather than whenever it feels like it.
+    if (reg && typeof reg.update === "function") {
+      try { reg.update(); } catch (e) { /* not fatal; the app still runs */ }
+    }
   }).catch(function () { /* offline shell simply unavailable; app still works */ });
 }
 
