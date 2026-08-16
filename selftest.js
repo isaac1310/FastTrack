@@ -318,10 +318,14 @@
       var l = logAt([["alcohol", 30], ["alcohol", 1]]);
       return eq(FT.intakeTotals(l, "2026-08-12", "2026-08-12").alcohol, 1, "windowed total");
     });
-    check("weekStart is Monday-based and stable across a week", function () {
-      if (FT.weekStart("2026-08-10") !== "2026-08-10") return "Monday did not map to itself";
-      if (FT.weekStart("2026-08-16") !== "2026-08-10") return "Sunday mapped to the wrong week";
-      if (FT.weekStart("2026-08-17") !== "2026-08-17") return "next Monday did not start a new week";
+    check("weekStart is Sunday-based and stable across a week", function () {
+      // Changed from Monday in v3.2.0: the tracked week is the Israeli one,
+      // and the day strip now reads Sunday..Saturday. Keeping the intake
+      // grouping on Monday would file a Sunday meal in the previous week.
+      if (FT.weekStart("2026-08-16") !== "2026-08-16") return "Sunday did not map to itself";
+      if (FT.weekStart("2026-08-10") !== "2026-08-09") return "Monday mapped to the wrong week";
+      if (FT.weekStart("2026-08-22") !== "2026-08-16") return "Saturday left its own week";
+      if (FT.weekStart("2026-08-23") !== "2026-08-23") return "next Sunday did not start a new week";
       return true;
     });
 
@@ -833,6 +837,78 @@
     });
 
     /* ================= fast history ================= */
+    group("editFast");
+    check("edits the fast with the matching start, not a list position", function () {
+      /* The display sorts newest-first, so an index would rewrite the wrong
+         row. Keyed on the original start timestamp instead. */
+      var h = [{ start: 100, end: 200, protocolHours: 16 },
+               { start: 900, end: 1000, protocolHours: 18 }];
+      var r = FT.editFast(h, 100, 150, 250, 1e12);
+      if (!r.ok) return "rejected: " + r.error;
+      return r.history[0].start === 150 && r.history[0].end === 250 &&
+             r.history[1].start === 900 && r.history[1].end === 1000
+        ? true : "wrong row edited: " + JSON.stringify(r.history);
+    });
+    check("does not mutate the array it was given", function () {
+      var h = [{ start: 100, end: 200, protocolHours: 16 }];
+      FT.editFast(h, 100, 150, 250, 1e12);
+      return h[0].start === 100 && h[0].end === 200 ? true : "source array was mutated";
+    });
+    check("keeps the protocol of the fast being edited", function () {
+      var r = FT.editFast([{ start: 100, end: 200, protocolHours: 18 }], 100, 150, 250, 1e12);
+      return r.ok && r.history[0].protocolHours === 18 ? true : "protocolHours lost";
+    });
+    check("rejects an end at or before the start", function () {
+      var h = [{ start: 100, end: 200, protocolHours: 16 }];
+      var a = FT.editFast(h, 100, 500, 400, 1e12);
+      var b = FT.editFast(h, 100, 500, 500, 1e12);
+      return a.ok === false && a.error === "order" && b.ok === false && b.error === "order"
+        ? true : "accepted a backwards or zero-length fast";
+    });
+    check("rejects a fast ending in the future", function () {
+      var r = FT.editFast([{ start: 100, end: 200, protocolHours: 16 }], 100, 1000, 5000, 3000);
+      return r.ok === false && r.error === "future" ? true : "accepted a future end";
+    });
+    check("rejects an absurdly long fast rather than storing it", function () {
+      var r = FT.editFast([{ start: 100, end: 200, protocolHours: 16 }],
+        100, 0, 40 * 86400000, 1e12);
+      return r.ok === false && r.error === "tooLong" ? true : "accepted a 40-day fast";
+    });
+    check("an unknown start is reported, not silently ignored", function () {
+      var r = FT.editFast([{ start: 100, end: 200, protocolHours: 16 }], 999, 1, 2, 1e12);
+      return r.ok === false && r.error === "notFound" ? true : "got " + JSON.stringify(r);
+    });
+    check("removeFast drops exactly one row and hands it back for undo", function () {
+      var h = [{ start: 100, end: 200 }, { start: 900, end: 1000 }];
+      var r = FT.removeFast(h, 100);
+      return r.history.length === 1 && r.history[0].start === 900 &&
+             r.removed && r.removed.start === 100 && h.length === 2
+        ? true : "got " + JSON.stringify(r);
+    });
+    check("removeFast on a missing start changes nothing", function () {
+      var r = FT.removeFast([{ start: 100, end: 200 }], 555);
+      return r.history.length === 1 && r.removed === null ? true : "got " + JSON.stringify(r);
+    });
+
+    group("weekStart");
+    check("the week starts on Sunday", function () {
+      /* 2026-08-16 is a Sunday. Every day from it through the following
+         Saturday must key to that same Sunday, and the next day must roll. */
+      var days = ["2026-08-16", "2026-08-17", "2026-08-20", "2026-08-22"];
+      for (var i = 0; i < days.length; i++) {
+        var got = FT.weekStart(days[i]);
+        if (got !== "2026-08-16") return days[i] + " keyed to " + got + ", expected 2026-08-16";
+      }
+      return FT.weekStart("2026-08-23") === "2026-08-23"
+        ? true : "the next Sunday did not start a new week";
+    });
+    check("a Sunday is its own week start, not the end of the previous one", function () {
+      // The Monday-based version put Sunday at the END of the prior week,
+      // so a Sunday meal landed in the week that had already closed.
+      return FT.weekStart("2026-08-16") === "2026-08-16"
+        ? true : "Sunday keyed to " + FT.weekStart("2026-08-16");
+    });
+
     group("fastStats");
     check("zero fasts returns zeros, not NaN", function () {
       var s = FT.fastStats([]);

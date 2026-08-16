@@ -24,6 +24,8 @@ var view = {
   chartAllGoals: false,
   editingWeightDate: null,
   showAllWeights: false,
+  editingFastStart: null,
+  showAllFasts: false,
   intakeDate: null,
   route: null,
   dayDate: null,
@@ -935,6 +937,7 @@ function chartCard() {
  *  Log
  * ============================================================ */
 var WEIGHT_ROWS = 5;
+var FAST_ROWS = 5;
 
 function logCard() {
   var html = '<div class="card"><div class="cardTitle">רישום</div>';
@@ -1300,14 +1303,18 @@ function dayScreen() {
 
   var html = '<div class="card screen dayCard full">';
 
-  // ---- header + 7-day strip: 3 back, today, 3 ahead ----
+  // ---- header + the calendar week, Sunday..Saturday ----
   var title = isToday ? "היום" : (date === FT.todayISO(new Date(Date.now() + 86400000)) ? "מחר" : WEEKDAYS[new Date(date + "T12:00:00").getDay()]);
   html += '<div class="dayHead"><div class="dayHeadRow">' +
     icoFork() + '<span class="screenTitle">' + esc(title) + '</span>' +
     '<span class="dayHeadDate n">' + fmtDate(date) + '</span></div>';
 
   html += '<div class="dayStrip">';
-  FT.dayRange(today, 3, 3).forEach(function (d) {
+  /* The week containing the day being viewed, not a rolling window around
+     today — so the strip reads Sunday..Saturday and a meal always lands in
+     the week it belongs to. Anchored on `date` rather than `today` so that
+     opening a day from the week screen shows that day's week. */
+  FT.weekDays(FT.weekStart(date), 7).forEach(function (d) {
     var dd = new Date(d + "T12:00:00");
     var sel = d === date;
     html += '<button class="dayPill' + (sel ? " sel" : "") + '" data-goday="' + d + '">' +
@@ -1503,7 +1510,44 @@ function historyCard() {
     '<div class="tile"><div class="v n">' + st.streakDays + '</div><div class="l">רצף ימים</div></div>' +
     '<div class="tile"><div class="v n">' + fmtHM(st.longestHours) + '</div><div class="l">הכי ארוך</div></div>' +
     '<div class="tile"><div class="v n">' + fmtHM(st.avg7Hours) + '</div><div class="l">ממוצע שבועי</div></div>' +
-    '</div></div>';
+    '</div>';
+
+  /* Newest first. Each row is keyed on its start timestamp, never on its
+     index in this sorted view. */
+  var fasts = doc.fastHistory.filter(function (f) {
+    return f && isFinite(f.start) && isFinite(f.end) && f.end > f.start;
+  }).sort(function (a, b) { return b.start - a.start; });
+
+  var shown = view.showAllFasts ? fasts : fasts.slice(0, FAST_ROWS);
+  html += '<div class="rows">';
+  shown.forEach(function (f) {
+    if (view.editingFastStart === f.start) {
+      html += '<div style="background:var(--surface2);border-radius:var(--r-tile);padding:12px;' +
+        'display:flex;flex-direction:column;gap:8px">' +
+        '<div class="note">התחלה</div>' +
+        '<input type="datetime-local" id="editFastStart" value="' + esc(toLocalInput(f.start)) + '"/>' +
+        '<div class="note">סיום</div>' +
+        '<input type="datetime-local" id="editFastEnd" value="' + esc(toLocalInput(f.end)) + '"/>' +
+        '<div class="btnRow"><button class="btn gold grow" data-savefast="' + f.start + '">שמירה</button>' +
+        '<button class="btn quiet" id="cancelFastEdit">ביטול</button></div></div>';
+      return;
+    }
+    // Date and clock go in ONE isolated run — a separator between two
+    // numbers reorders under RTL and silently swaps them.
+    html += '<div class="row">' +
+      '<span class="d">' + n(fmtDate(FT.todayISO(new Date(f.start))) + " " + fmtClock(f.start)) + '</span>' +
+      '<span class="rowVals">' +
+      '<span class="n" style="font-weight:500">' + esc(fmtHM((f.end - f.start) / 3600000)) + '</span>' +
+      '<button class="linkBtn" data-editfast="' + f.start + '">עריכה</button>' +
+      '<button class="x" data-delfast="' + f.start + '">✕</button></span></div>';
+  });
+  html += '</div>';
+  if (fasts.length > FAST_ROWS) {
+    html += '<button class="linkBtn" id="toggleAllFasts">' +
+      (view.showAllFasts ? "הצג פחות" : "הצג את כל " + n(fasts.length) + " הצומות") + '</button>';
+  }
+
+  html += '</div>';
   return html;
 }
 
@@ -1887,6 +1931,28 @@ function wire() {
     };
   });
 
+  // ---- past fasts ----
+  each("[data-editfast]", function (b) {
+    b.onclick = function () {
+      view.editingFastStart = Number(b.getAttribute("data-editfast")); render();
+    };
+  });
+  on("cancelFastEdit", function () { view.editingFastStart = null; render(); });
+  on("toggleAllFasts", function () { view.showAllFasts = !view.showAllFasts; render(); });
+  each("[data-savefast]", function (b) {
+    b.onclick = function () { saveEditedFast(Number(b.getAttribute("data-savefast"))); };
+  });
+  each("[data-delfast]", function (b) {
+    b.onclick = function () {
+      var start = Number(b.getAttribute("data-delfast"));
+      var r = FT.removeFast(doc.fastHistory, start);
+      if (!r.removed) return;
+      doc.fastHistory = r.history;
+      persist(); render();
+      showToast("צום נמחק", function () { doc.fastHistory = doc.fastHistory.concat([r.removed]); });
+    };
+  });
+
   on("toggleMeasure", function () { view.showMeasureForm = !view.showMeasureForm; render(); });
   on("saveMeasure", saveMeasure);
   each("[data-delmeasure]", function (b) {
@@ -2030,6 +2096,32 @@ function saveEditedWeight(origDate) {
   if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
   showToast(r.merged ? "מוזג לשקילה הקיימת של " + fmtDate(newDate) : "עודכן",
     function () { doc.weights = before; });
+}
+
+function saveEditedFast(origStart) {
+  var s = document.getElementById("editFastStart");
+  var e = document.getElementById("editFastEnd");
+  if (!s || !e) return;
+  if (!s.value || !e.value) { showToast("צריך שעת התחלה וסיום"); return; }
+
+  var before = doc.fastHistory.slice();
+  var r = FT.editFast(doc.fastHistory, origStart,
+    new Date(s.value).getTime(), new Date(e.value).getTime(), Date.now());
+
+  if (!r.ok) {
+    showToast(r.error === "order" ? "הסיום חייב להיות אחרי ההתחלה"
+      : r.error === "future" ? "אי אפשר לרשום צום שנגמר בעתיד"
+      : r.error === "tooLong" ? "צום ארוך מ־30 יום כנראה אינו נכון"
+      : "לא ניתן לעדכן את הצום");
+    return;
+  }
+
+  doc.fastHistory = r.history;
+  view.editingFastStart = null;
+  var ok = persist();
+  render();
+  if (!ok) { showToast("לא ניתן לשמור במכשיר הזה"); return; }
+  showToast("הצום עודכן", function () { doc.fastHistory = before; });
 }
 
 function bumpIntake(key, delta) {

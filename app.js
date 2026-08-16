@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "3.1.6";
+var APP_VERSION = "3.2.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 6;
 
@@ -1318,11 +1318,14 @@ function intakeTotals(log, fromISO, toISO) {
   return intakeCountsBetween(log, fromISO || "1970-01-01", toISO || today);
 }
 
-/* Monday-based week key, so a week is a week regardless of locale. */
+/* Sunday-based week key — the Israeli week, which is the one being tracked.
+ * getDay() is already Sun=0, so the day number IS the offset back to Sunday.
+ * This keys the weekly intake grouping as well as the day strip, so both
+ * agree on where a week starts; a Sunday-start banner over Monday-start
+ * totals would put the same meal in two different weeks. */
 function weekStart(dateISO) {
   var d = new Date(dateISO + "T12:00:00");
-  var dow = (d.getDay() + 6) % 7; // Mon=0
-  d.setDate(d.getDate() - dow);
+  d.setDate(d.getDate() - d.getDay()); // Sun=0
   return todayISO(d);
 }
 
@@ -1416,6 +1419,36 @@ function timeToNextPhase(hours) {
   return p.to - Math.max(0, hours);
 }
 
+/* A fast is edited and deleted by its ORIGINAL start timestamp, the way a
+ * weigh-in is keyed on its date. Two fasts cannot begin in the same
+ * millisecond, and a list index would shift under the newest-first display
+ * sort — editing row 0 would silently rewrite a different fast. */
+var MAX_FAST_MS = 30 * 86400000;
+
+function editFast(history, origStart, newStart, newEnd, nowMs) {
+  var h = (history || []).slice();
+  var i = -1;
+  for (var k = 0; k < h.length; k++) {
+    if (h[k] && h[k].start === origStart) { i = k; break; }
+  }
+  if (i < 0) return { ok: false, error: "notFound" };
+  if (!isFinite(newStart) || !isFinite(newEnd)) return { ok: false, error: "invalid" };
+  if (newEnd <= newStart) return { ok: false, error: "order" };
+  if (newEnd - newStart > MAX_FAST_MS) return { ok: false, error: "tooLong" };
+  if (isFinite(nowMs) && newEnd > nowMs) return { ok: false, error: "future" };
+  h[i] = { start: newStart, end: newEnd, protocolHours: h[i].protocolHours };
+  return { ok: true, history: h };
+}
+
+function removeFast(history, start) {
+  var out = [], removed = null;
+  (history || []).forEach(function (f) {
+    if (f && f.start === start && !removed) removed = f;
+    else out.push(f);
+  });
+  return { history: out, removed: removed };
+}
+
 function fastStats(history, nowMs) {
   var h = (history || []).filter(function (f) { return f && isFinite(f.start) && isFinite(f.end) && f.end > f.start; });
   if (!h.length) return { count: 0, longestHours: 0, avg7Hours: null, streakDays: 0 };
@@ -1503,7 +1536,8 @@ window.FT = {
   setDayTag: setDayTag, clearDayTag: clearDayTag, setSlotText: setSlotText,
   setTraining: setTraining, dayRange: dayRange, weekDays: weekDays,
   getPhase: getPhase, phaseIndex: phaseIndex, timeToNextPhase: timeToNextPhase,
-  fastStats: fastStats, migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
+  fastStats: fastStats, editFast: editFast, removeFast: removeFast,
+  migrate: migrate, emptyDoc: emptyDoc, normalizeDoc: normalizeDoc,
   daysBetween: daysBetween, todayISO: todayISO, bmi: bmi, fmtDur: fmtDur,
   backupStale: backupStale, validGoalWeight: validGoalWeight,
   lsSet: lsSet, lsGet: lsGet,
