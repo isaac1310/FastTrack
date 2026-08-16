@@ -1383,6 +1383,30 @@
         return "<body> has an onclick handler; every click in the app will bubble to it";
       return true;
     });
+    check("a fold does not repeat its own title inside its body", function () {
+      /* Cards keep their own .cardTitle for when they are rendered bare, but
+         goalsCard and historyCard are only ever shown inside a fold that
+         already prints the same heading — so the screen read the title
+         twice, once in the fold header and again directly beneath it. */
+      if (!inApp) return skip("not running inside the app page");
+      var folds = document.querySelectorAll("[data-fold]");
+      if (!folds.length) return skip("this route renders no folds");
+      var checked = 0;
+      for (var i = 0; i < folds.length; i++) {
+        var head = folds[i].querySelector(".foldTitle");
+        var body = folds[i].parentNode.querySelector(".foldBody");
+        if (!head || !body) continue; // collapsed folds render no body
+        checked++;
+        var title = head.textContent.trim();
+        var inner = body.querySelectorAll(".cardTitle");
+        for (var j = 0; j < inner.length; j++) {
+          if (inner[j].textContent.trim() === title)
+            return 'fold "' + title + '" repeats its title inside its body';
+        }
+      }
+      if (!checked) return skip("every fold on this route is collapsed");
+      return true;
+    });
     check("every picker input is wired, not just type=date", function () {
       /* Both earlier picker fixes were scoped to input[type=date]. The fasting
          start editor (#startEdit) is a datetime-local, so it got neither the

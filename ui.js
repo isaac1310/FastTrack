@@ -1441,8 +1441,11 @@ function goalsCard() {
   var today = FT.todayISO();
   var ng = FT.nextGoal(doc.goals);
 
-  var html = '<div class="card" style="gap:10px"><div class="cardHead" style="align-items:center">' +
-    '<div class="cardTitle">יעדים</div>' +
+  /* No card title here: this card is rendered inside fold("goals", "יעדים"),
+     which already prints that heading. The head keeps flex-end so the add
+     button stays where it was when the title shared the row with it. */
+  var html = '<div class="card" style="gap:10px">' +
+    '<div class="cardHead" style="align-items:center;justify-content:flex-end">' +
     '<button class="linkBtn" id="toggleGoalForm">' + (view.showGoalForm ? "סגירה" : "+ הוספה") + '</button></div>';
 
   if (view.showGoalForm) {
@@ -1501,7 +1504,8 @@ function fmtHM(hours) {
 
 function historyCard() {
   var st = FT.fastStats(doc.fastHistory);
-  var html = '<div class="card" style="gap:10px"><div class="cardTitle">היסטוריית צומות</div>';
+  // No card title: fold("hist", "היסטוריית צומות") already prints it.
+  var html = '<div class="card" style="gap:10px">';
   if (!st.count) {
     html += '<div class="empty">עדיין לא סיימת צום דרך האפליקציה.</div></div>';
     return html;
