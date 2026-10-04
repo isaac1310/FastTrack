@@ -1,4 +1,4 @@
-/* Aviente Health Track — UI layer (v3.1.0).
+/* Aviente Health Track — UI layer (v3.3.0).
  *
  * render() rebuilds the DOM on real state changes only.
  * tick() runs every second and patches ONLY text/geometry by id —
@@ -26,13 +26,18 @@ var view = {
   showAllWeights: false,
   editingFastStart: null,
   showAllFasts: false,
-  intakeDate: null,
   route: null,
   dayDate: null,
-  picking: null,
-  folds: { goals: true },        // which tag is waiting for a meal to be tapped
-  slotDrafts: null,     // {date, text:{slotKey:string}} — see restoreFocus()
-  draft: null,
+  weekAnchor: null,     // any date inside the week the week screen shows
+  picking: null,        // which tag is waiting for a meal to be tapped
+  folds: { goals: true },
+  /* Unsaved typed input, per date: meal text, the weight field, and staged
+     past-day intake counts. Persisted to its own key on every keystroke, so a
+     day switch, an app kill or a service-worker reload cannot lose it — while
+     the doc itself still only changes on an explicit save (DESIGN-BRIEF §3).
+     {slots:{date:{slotKey:text}}, weight:{date:text}, intake:{date:{key:n}}} */
+  drafts: { slots: {}, weight: {}, intake: {} },
+  pendingReload: false,
   baselineLog: null,
   showBackdate: false,
   backdateValue: null,
@@ -169,6 +174,7 @@ function boot() {
   /* Snapshot of the log at open, so today's edits can be cancelled back to
      a known state — the same courtesy the past-day draft gets. */
   if (doc) view.baselineLog = doc.intakeLog.slice();
+  if (!demo) view.drafts = loadDrafts();
   applyTheme();
   if (!location.hash) location.hash = "#/home";
   window.addEventListener("hashchange", function () {
@@ -179,6 +185,64 @@ function boot() {
   setInterval(tick, 1000);
   registerSW();
 }
+
+/* ---------- drafts ---------- */
+var DRAFT_KEY = "aviente-drafts";
+function loadDrafts() {
+  var out = { slots: {}, weight: {}, intake: {} };
+  try {
+    var d = JSON.parse(FT.lsGet(DRAFT_KEY) || "null");
+    if (d && typeof d === "object") {
+      ["slots", "weight", "intake"].forEach(function (k) {
+        if (d[k] && typeof d[k] === "object" && !Array.isArray(d[k])) out[k] = d[k];
+      });
+    }
+  } catch (e) { /* a corrupt draft is not worth refusing to start over */ }
+  return out;
+}
+function saveDrafts() {
+  if (demoParam()) return;
+  FT.lsSet(DRAFT_KEY, JSON.stringify(view.drafts));
+}
+function clearDrafts(date) {
+  delete view.drafts.slots[date];
+  delete view.drafts.weight[date];
+  delete view.drafts.intake[date];
+  saveDrafts();
+}
+function savedWeightText(date) {
+  var w = doc.weights.filter(function (x) { return x.date === date; })[0];
+  return w ? w.kg.toFixed(1) : "";
+}
+function intakeDraftDirty(date) {
+  var d = view.drafts.intake[date];
+  if (!d) return false;
+  var row = FT.intakeOn(doc.intakeLog, date);
+  return FT.INTAKE_ITEMS.some(function (it) {
+    return isFinite(d[it.key]) && d[it.key] !== Math.max(0, Number(row[it.key]) || 0);
+  });
+}
+function dayDirty(date) {
+  var day = FT.dayDoc(doc.days, date);
+  var t = view.drafts.slots[date];
+  var textDirty = !!t && FT.SLOT_KEYS.some(function (k) {
+    return typeof t[k] === "string" && t[k] !== day.slots[k].text;
+  });
+  var w = view.drafts.weight[date];
+  var weightDirty = typeof w === "string" && w.trim() !== "" && w.trim() !== savedWeightText(date);
+  return textDirty || weightDirty || intakeDraftDirty(date);
+}
+/* Dates other than `except` holding unsaved input, oldest first. */
+function dirtyDates(except) {
+  var all = {};
+  ["slots", "weight", "intake"].forEach(function (k) {
+    Object.keys(view.drafts[k]).forEach(function (d) { all[d] = true; });
+  });
+  return Object.keys(all).filter(function (d) {
+    return d !== except && /^\d{4}-\d{2}-\d{2}$/.test(d) && dayDirty(d);
+  }).sort();
+}
+function anyDirty() { return dirtyDates(null).length > 0; }
 
 function todayDiffersFromBaseline() {
   if (!view.baselineLog) return false;
@@ -218,8 +282,19 @@ function registerSW() {
      exactly this reason. */
   navigator.serviceWorker.addEventListener("controllerchange", function () {
     if (!hadController || reloading) return;
+    /* Never yank the page from under a thumb that is typing. Drafts survive a
+       reload now, but the keyboard, the caret and the word in progress do not.
+       Wait until the app is backgrounded. */
+    var a = document.activeElement;
+    if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")) { view.pendingReload = true; return; }
     reloading = true;
     location.reload();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden" && view.pendingReload && !reloading) {
+      reloading = true;
+      location.reload();
+    }
   });
 
   navigator.serviceWorker.register("sw.js").then(function (reg) {
@@ -464,8 +539,8 @@ function fastingCard() {
 
   var nextLabel = toNext === null ? "" : FT.PHASES[idx + 1].label;
   var startTxt = "התחלה ";
-  var startDay = new Date(doc.session.start).toDateString();
-  startTxt += (startDay === new Date().toDateString() ? "היום" : "אתמול") + " ב־";
+  var ago = FT.daysBetween(FT.todayISO(new Date(doc.session.start)), FT.todayISO());
+  startTxt += (ago === 0 ? "היום" : ago === 1 ? "אתמול" : n(fmtDate(FT.todayISO(new Date(doc.session.start))))) + " ב־";
 
   var html2 = '<div class="card hero">';
   html2 += '<div class="heroRow">';
@@ -510,10 +585,10 @@ function fastingCard() {
 /* "לפני 8:12 שעות" — hours:minutes since a dose. */
 function sinceLabel(hours) {
   if (hours === null || !isFinite(hours)) return "—";
-  if (hours < 1) return Math.round(hours * 60) + " דק׳";
-  if (hours < 24) return fmtHM(hours) + " שעות";
+  if (hours < 1) return n(Math.round(hours * 60)) + " דק׳";
+  if (hours < 24) return n(fmtHM(hours)) + " שעות";
   var d = Math.floor(hours / 24);
-  return d + (d === 1 ? " יום" : " ימים");
+  return n(d) + (d === 1 ? " יום" : " ימים");
 }
 
 var CAFFEINE_RELEVANT_H = 72;  // withdrawal can still be running at 2-3 days
@@ -522,10 +597,10 @@ var ALCOHOL_RELEVANT_H = 16;   // through the recovery/hangover window
 /* "לפני 3 ימים" / "לפני 4:20 שעות" / "לפני 12 דק׳" */
 function agoLabel(hours) {
   if (hours === null || !isFinite(hours)) return "—";
-  if (hours < 1) return "לפני " + Math.round(hours * 60) + " דק׳";
-  if (hours < 24) return "לפני " + fmtHM(hours) + " שעות";
+  if (hours < 1) return "לפני " + n(Math.round(hours * 60)) + " דק׳";
+  if (hours < 24) return "לפני " + n(fmtHM(hours)) + " שעות";
   var d = Math.floor(hours / 24);
-  return "לפני " + d + (d === 1 ? " יום" : " ימים");
+  return "לפני " + n(d) + (d === 1 ? " יום" : " ימים");
 }
 
 /* One row per substance: how long since the last one, and the stage.
@@ -544,15 +619,20 @@ function intakeSummaryBlock() {
         '<span class="sumStage dim">—</span></div>';
       return;
     }
-    var clean = FT.abstinenceDays(doc.intakeLog,
-      r.id === "caffeine" ? FT.CAFFEINE_KEYS : (r.id === "alcohol" ? FT.ALCOHOL_KEYS : FT.MEAT_KEYS));
+    /* By id, with gluten listed. The old ternary fell through to MEAT_KEYS, so
+       the gluten row showed meat's clean-day count. */
+    var clean = FT.abstinenceDays(doc.intakeLog, {
+      caffeine: FT.CAFFEINE_KEYS, alcohol: FT.ALCOHOL_KEYS, meat: FT.MEAT_KEYS, gluten: FT.GLUTEN_KEYS
+    }[r.id] || []);
     var extra = "";
     if (r.todayCount > 0) extra = n(r.todayCount) + " היום";
     else if (clean !== null && clean > 0) extra = n(clean) + (clean === 1 ? " יום נקי" : " ימים נקיים");
 
     html += '<div class="sumRow">' +
       '<span class="sumLabel">' + esc(r.label) + '</span>' +
-      '<span class="sumAgo n">' + agoLabel(r.hours) + (r.approxOnly ? '<span class="dim">*</span>' : '') + '</span>' +
+      /* NOT .n on the whole span: it holds Hebrew words, and an LTR-isolated
+         run reads "לפני 3 ימים" backwards. agoLabel isolates the numbers. */
+      '<span class="sumAgo">' + agoLabel(r.hours) + (r.approxOnly ? '<span class="dim">*</span>' : '') + '</span>' +
       '<span class="sumStage">' + esc(r.stage.label) + (extra ? ' <span class="dim">· ' + extra + '</span>' : '') + '</span>' +
       '</div>';
   });
@@ -755,15 +835,19 @@ function paceCard() {
     return html;
   }
 
-  var vTxt = { ahead: "לפני הקצב", onpace: "בקצב", behind: "מאחורי הקצב", unknown: "אין מספיק נתונים" }[pace.verdict];
-  var vCls = pace.verdict === "unknown" ? "none" : pace.verdict;
+  var vTxt = { ahead: "לפני הקצב", onpace: "בקצב", behind: "מאחורי הקצב",
+    unknown: "אין מספיק נתונים", stale: "אין שקילה עדכנית" }[pace.verdict];
+  var vCls = (pace.verdict === "unknown" || pace.verdict === "stale") ? "none" : pace.verdict;
 
   html += '<div style="font-size:12px;color:var(--muted)">יעד ' + n(g.targetKg.toFixed(1)) +
     ' ק״ג · עוד <b style="font-weight:500;color:var(--text)" class="n">' + Math.max(0, pace.daysLeft) + '</b> ימים</div>' +
     '</div><div class="verdict ' + vCls + '">' + vTxt + '</div></div>';
 
+  /* Shown as a loss rate, like "required" — but a gain says so in words.
+     Math.abs() used to show gaining 0.4 kg/week as "0.40", the same as losing it. */
+  var gaining = pace.actualKgPerWeek !== null && pace.actualKgPerWeek > 0.005;
   var actual = pace.actualKgPerWeek === null ? null : Math.abs(pace.actualKgPerWeek);
-  var actualOk = pace.actualKgPerWeek !== null && pace.requiredKgPerWeek !== null &&
+  var actualOk = pace.verdict !== "stale" && pace.actualKgPerWeek !== null && pace.requiredKgPerWeek !== null &&
     (-pace.actualKgPerWeek) >= pace.requiredKgPerWeek;
 
   html += '<div class="tiles3">' +
@@ -772,7 +856,8 @@ function paceCard() {
       '</div><div class="u">ק״ג/שבוע</div></div>' +
     '<div class="tile"><div class="l">בפועל</div><div class="v n"' +
       (actualOk ? ' style="color:var(--sage)"' : (pace.verdict === "behind" ? ' style="color:var(--rust)"' : '')) + '>' +
-      (actual === null ? "—" : actual.toFixed(2)) + '</div><div class="u">ק״ג/שבוע · ' + n("21") + ' יום</div></div>' +
+      (actual === null ? "—" : (gaining ? "+" : "") + actual.toFixed(2)) + '</div><div class="u">' +
+      (gaining ? "עלייה · " : "") + 'ק״ג/שבוע · ' + n("21") + ' יום</div></div>' +
     '<div class="tile"><div class="l">צפי ליעד</div><div class="v n">' +
       (pace.projectedWeightAtGoal === null ? "—" : pace.projectedWeightAtGoal.toFixed(1)) +
       '</div><div class="u">ק״ג</div></div></div>';
@@ -782,8 +867,13 @@ function paceCard() {
       n(pace.requiredKgPerWeek.toFixed(2)) + ' ק״ג לשבוע, מעל הטווח של ' + n("0.5–1") +
       ' ק״ג לשבוע שנחשב בר-קיימא לרוב האנשים. אפשר להזיז את התאריך או את היעד.</div></div>';
   }
-  html += '<div class="note">מבוסס על קו מגמה של ' + n("21") + ' הימים האחרונים, לא על השקילה האחרונה. ' +
-    'האפליקציה עוקבת אחרי משקל וצום בלבד — היא לא יודעת מה אכלת, ולכן לא יכולה להסביר למה הקצב השתנה.</div>';
+  if (pace.verdict === "stale") {
+    html += '<div class="blk warn"><div class="k">אין שקילה עדכנית</div><div class="v">השקילה האחרונה הייתה לפני ' +
+      n(pace.staleDays) + ' ימים (' + n(fmtDate(pace.lastDate)) + '). הקצב שלמעלה הוא של התקופה שלפני כן — ' +
+      'אין תחזית ואין קביעה עד שקילה חדשה.</div></div>';
+  }
+  html += '<div class="note">מבוסס על קו מגמה של ' + n("21") + ' ימי שקילה, לא על השקילה האחרונה. ' +
+    'הארוחות והצריכה לא מסבירות את הקצב: שינה, מלח וכל מה שלא נרשם מזיזים את המשקל.</div>';
   html += '</div>';
   return html;
 }
@@ -792,7 +882,6 @@ function paceCard() {
  *  Stat tiles + composition signal
  * ============================================================ */
 function tilesCard() {
-  var sm = FT.smoothWeights(doc.weights);
   var onP = doc.measures.filter(function (m) { return m.onProtocol; })
     .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
 
@@ -808,8 +897,9 @@ function tilesCard() {
       '<div class="v n">' + v + '</div><div class="d n ' + cls + '">' + d + '</div></div>';
   }
 
-  var wNow = sm.length ? sm[sm.length - 1].trend : null;
-  var wPrev = sm.length > 7 ? sm[sm.length - 8].trend : null;
+  var wk = FT.weightWeekChange(doc.weights);
+  var wNow = wk.trend;
+  var wPrev = wk.delta === null ? null : wk.trend - wk.delta;   // a week back, by date
   var waistNow = onP.length ? onP[onP.length - 1].waistCm : null;
   var waistPrev = onP.length > 1 ? onP[onP.length - 2].waistCm : null;
   var thighNow = onP.length ? onP[onP.length - 1].thighCm : null;
@@ -1043,35 +1133,21 @@ function lastOf(key) {
 }
 
 function intakeCard() {
-  var date = view.intakeDate || FT.todayISO();
-  var isToday = date === FT.todayISO();
-  var row = FT.intakeOn(doc.intakeLog, date);
+  var today = FT.todayISO();
+  var row = FT.intakeOn(doc.intakeLog, today);
 
-  /* One mechanism for choosing the day: this picker. When it is not today,
-     the card is visibly marked, because the failure that matters is tapping +
-     while the date is still set to last Tuesday and not noticing. */
-  var html = '<div class="card' + (isToday ? '' : ' pastDay') + '">' +
+  /* Today only. Another day is logged from the day screen, together with that
+     day's meals — this card used to carry a fourth, separate way of picking a
+     date, and the failure it guarded against (tapping + while still set to
+     last Tuesday) only existed because of it. */
+  var html = '<div class="card">' +
     '<div class="cardHead" style="align-items:center">' +
-    '<div class="cardTitle">צריכה</div>' +
-    '<input type="date" id="intakeDate" value="' + esc(date) + '" max="' + FT.todayISO() +
-    '" style="width:158px;padding:6px 8px;font-size:13px"/></div>';
-
-  if (!isToday) {
-    html += '<div class="pastBanner">רושם ל<b class="n">' + fmtDate(date) + '</b>, לא להיום.' +
-      '<button class="linkBtn" id="intakeToday">חזרה להיום</button></div>';
-  }
-
-  /* Today writes on each tap — you can see the result immediately and the
-     live status reacts. A past day cannot show you anything changing, so it
-     is staged and saved explicitly. That is also the project's own rule:
-     explicit save, never autosave, and never a confirmation that can lie. */
-  var draft = (!isToday && view.draft && view.draft.date === date) ? view.draft.counts : null;
+    '<div class="cardTitle">צריכה · היום</div>' +
+    '<button class="linkBtn" data-goto="day">יום אחר ←</button></div>';
 
   html += '<div class="rows">';
   FT.INTAKE_ITEMS.forEach(function (it) {
-    var saved = Math.max(0, Number(row[it.key]) || 0);
-    var c = draft && isFinite(draft[it.key]) ? draft[it.key] : saved;
-    var changed = !isToday && c !== saved;
+    var c = Math.max(0, Number(row[it.key]) || 0);
     html += '<div class="row" style="padding:8px 2px">' +
       '<span style="display:flex;flex-direction:column;gap:1px;min-width:0">' +
       '<span style="font-size:14px;font-weight:500">' + esc(it.label) + '</span>' +
@@ -1080,31 +1156,21 @@ function intakeCard() {
       (lastOf(it.key) ? ' · אחרון ' + agoLabel(lastOf(it.key)) : '') + '</span>' +
       (it.hint ? '<span style="font-size:11px;color:var(--dim)">' + esc(it.hint) + '</span>' : '') +
       '</span>' +
-      '<span class="stepper' + (changed ? ' dirty' : '') + '">' +
+      '<span class="stepper">' +
       '<button class="stepBtn" data-intake-dec="' + it.key + '" aria-label="פחות">−</button>' +
       '<span class="stepVal n" id="intakeVal_' + it.key + '">' + c + '</span>' +
       '<button class="stepBtn" data-intake-inc="' + it.key + '" aria-label="עוד">+</button>' +
       '</span></div>';
-
   });
   html += '</div>';
 
-  var t = FT.intakeTotals(doc.intakeLog, FT.weekStart(FT.todayISO()), FT.todayISO());
+  var t = FT.intakeTotals(doc.intakeLog, FT.weekStart(today), today);
   var parts = [];
   FT.INTAKE_ITEMS.forEach(function (it) {
     if (t[it.key] > 0) parts.push(esc(it.label) + " " + n(t[it.key]));
   });
-  if (isToday && todayDiffersFromBaseline()) {
+  if (todayDiffersFromBaseline()) {
     html += '<button class="btn quiet" id="cancelToday">ביטול השינויים של היום</button>';
-  }
-  if (!isToday) {
-    var dirty = !!draft && FT.INTAKE_ITEMS.some(function (it) {
-      return isFinite(draft[it.key]) && draft[it.key] !== Math.max(0, Number(row[it.key]) || 0);
-    });
-    html += '<div class="btnRow">' +
-      '<button class="btn gold grow" id="saveIntake"' + (dirty ? '' : ' disabled') + '>' +
-      (dirty ? 'שמירה ל' + fmtDate(date) : 'אין שינוי לשמור') + '</button>' +
-      (dirty ? '<button class="btn quiet" id="discardIntake">ביטול</button>' : '') + '</div>';
   }
 
   html += '<div class="note">השבוע: ' + (parts.length ? parts.join(" · ") : "עדיין כלום") + '</div>';
@@ -1225,28 +1291,47 @@ function homeScreen() {
   }
 
   // weight + today
-  var sm = FT.smoothWeights(doc.weights);
-  var wNow = sm.length ? sm[sm.length - 1].trend : null;
-  var wPrev = sm.length > 7 ? sm[sm.length - 8].trend : null;
-  var delta = (wNow !== null && wPrev !== null) ? wNow - wPrev : null;
+  /* The last weigh-in as weighed, with its date, and the trend's change over
+     a week BY DATE. This used to show the smoothed trend labelled "today's
+     weight", and compared it with the 8th-last reading — any span at all. */
+  var wk = FT.weightWeekChange(doc.weights);
+  // a week's change from August is not this week's change
+  var delta = wk.date && FT.daysBetween(wk.date, today) <= FT.PACE_STALE_DAYS ? wk.delta : null;
+  var weighedToday = wk.date === today;
   var day = FT.dayDoc(doc.days, today);
   var flags = FT.dayFlags(day);
 
   html += '<div class="homePair full">';
-  html += '<button class="card screen homeMini" data-goto="day"><span class="hmLabel">משקל היום</span>' +
-    '<span class="hmVal n">' + (wNow === null ? "—" : wNow.toFixed(1)) + '</span>' +
-    '<span class="hmDelta n ' + (delta === null ? "flat" : (delta < -0.05 ? "down" : (delta > 0.05 ? "up" : "flat"))) + '">' +
-    (delta === null ? "—" : (delta > 0 ? "+" : "") + delta.toFixed(1)) + '</span></button>';
+  html += '<button class="card screen homeMini" data-goto="day"><span class="hmLabel">משקל</span>' +
+    '<span class="hmVal n">' + (wk.kg === null ? "—" : wk.kg.toFixed(1)) + '</span>' +
+    '<span class="hmSub">' + (wk.date === null ? "עוד לא נשקלת"
+      : weighedToday ? "נשקל היום" : "טרם נשקלת היום · אחרון " + n(fmtDate(wk.date))) + '</span>' +
+    (delta === null ? '' : '<span class="hmDelta ' + (delta < -0.05 ? "down" : (delta > 0.05 ? "up" : "flat")) + '">שבוע ' +
+      n((delta > 0 ? "+" : "") + delta.toFixed(1)) + '</span>') + '</button>';
+
+  var meals = FT.SLOT_KEYS.filter(function (k) { return day.slots[k].text.trim() !== ""; }).length;
   html += '<button class="card screen homeMini" data-goto="day"><span class="hmLabel">היום</span>' +
+    '<span class="hmVal">' + n(meals) + '<span class="hmOf">מתוך ' + n(FT.SLOT_KEYS.length) + ' ארוחות</span></span>' +
     '<span class="hmTags">';
-  var anyTag = false;
   FT.DAY_TAGS.forEach(function (t) {
-    if (flags.counts[t.key] > 0) { anyTag = true;
-      html += '<span class="tagPill t-' + t.key + '">' + esc(t.label) + '</span>'; }
+    if (flags.counts[t.key] > 0) {
+      html += '<span class="tagPill t-' + t.key + '">' + esc(t.label) +
+        (flags.counts[t.key] > 1 ? ' ' + n(flags.counts[t.key]) : '') + '</span>';
+    }
   });
-  if (day.training) { anyTag = true; html += '<span class="tagPill t-train">אימון</span>'; }
-  if (!anyTag) html += '<span class="hmEmpty">עדיין ריק</span>';
+  if (day.training) html += '<span class="tagPill t-train">אימון</span>';
   html += '</span></button></div>';
+
+  // quick log — the most frequent entries, one tap each, always for today
+  var counts = FT.intakeOn(doc.intakeLog, today);
+  html += '<div class="card quickLog full"><span class="hmLabel">רישום מהיר · היום</span><div class="quickRow">';
+  FT.INTAKE_ITEMS.forEach(function (it) {
+    var c = Math.max(0, Number(counts[it.key]) || 0);
+    html += '<button class="quickBtn" data-quick="' + it.key + '" aria-label="עוד ' + esc(it.label) + '">' +
+      '<span class="qPlus">+</span><span class="qLabel">' + esc(it.label) + '</span>' +
+      (c ? '<span class="qCount">' + n(c) + '</span>' : '') + '</button>';
+  });
+  html += '</div></div>';
 
   // tiles
   var tiles = [
@@ -1279,19 +1364,32 @@ function ringMini(pct) {
  *  Day screen — the ruled notepad
  * ============================================================ */
 function slotDraftText(date, key, saved) {
-  if (view.slotDrafts && view.slotDrafts.date === date &&
-      typeof view.slotDrafts.text[key] === "string") {
-    return view.slotDrafts.text[key];
-  }
-  return saved;
+  var d = view.drafts.slots[date];
+  return d && typeof d[key] === "string" ? d[key] : saved;
 }
 
-function dayDirty(date, day) {
-  if (!view.slotDrafts || view.slotDrafts.date !== date) return false;
-  return FT.SLOT_KEYS.some(function (k) {
-    var d = view.slotDrafts.text[k];
-    return typeof d === "string" && d !== day.slots[k].text;
+/* The intake count shown for a date: the staged draft for a past day, else the log. */
+function intakeShown(date, key) {
+  var saved = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[key]) || 0);
+  var d = view.drafts.intake[date];
+  return d && isFinite(d[key]) ? d[key] : saved;
+}
+
+/* Sunday..Saturday strip with a week back / forward on either side. RTL puts
+   Sunday on the right, so the "earlier" arrow sits on the right too. */
+function dayStripHtml(date, today) {
+  var html = '<div class="dayNav">' +
+    '<button class="weekArrow" data-goday="' + FT.dayRange(date, 7, 0)[0] + '" aria-label="השבוע הקודם">›</button>' +
+    '<div class="dayStrip">';
+  FT.weekDays(FT.weekStart(date), 7).forEach(function (d) {
+    var dd = new Date(d + "T12:00:00");
+    var cls = "dayPill" + (d === date ? " sel" : "") + (dayDirty(d) ? " hasDraft" : "");
+    html += '<button class="' + cls + '" data-goday="' + d + '">' +
+      '<span class="dp1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) + '</span>' +
+      '<span class="dp2 n">' + dd.getDate() + '</span></button>';
   });
+  html += '</div><button class="weekArrow" data-goday="' + FT.dayRange(date, 0, 7)[7] + '" aria-label="השבוע הבא">‹</button></div>';
+  return html;
 }
 
 function dayScreen() {
@@ -1300,36 +1398,35 @@ function dayScreen() {
   var day = FT.dayDoc(doc.days, date);
   var flags = FT.dayFlags(day);
   var isToday = date === today;
+  var isFuture = date > today;
 
-  var html = '<div class="card screen dayCard full">';
+  var html = '<div class="card screen dayCard full' + (isToday ? '' : ' pastDay') + '">';
 
   // ---- header + the calendar week, Sunday..Saturday ----
-  var title = isToday ? "היום" : (date === FT.todayISO(new Date(Date.now() + 86400000)) ? "מחר" : WEEKDAYS[new Date(date + "T12:00:00").getDay()]);
+  var title = isToday ? "היום" : (date === FT.todayISO(new Date(Date.now() + 86400000)) ? "מחר"
+    : (date === FT.todayISO(new Date(Date.now() - 86400000)) ? "אתמול" : WEEKDAYS[new Date(date + "T12:00:00").getDay()]));
   html += '<div class="dayHead"><div class="dayHeadRow">' +
     icoFork() + '<span class="screenTitle">' + esc(title) + '</span>' +
+    (isToday ? '' : '<button class="linkBtn" data-goday="' + today + '">חזרה להיום</button>') +
     '<span class="dayHeadDate n">' + fmtDate(date) + '</span></div>';
+  html += dayStripHtml(date, today) + '</div>';
 
-  html += '<div class="dayStrip">';
-  /* The week containing the day being viewed, not a rolling window around
-     today — so the strip reads Sunday..Saturday and a meal always lands in
-     the week it belongs to. Anchored on `date` rather than `today` so that
-     opening a day from the week screen shows that day's week. */
-  FT.weekDays(FT.weekStart(date), 7).forEach(function (d) {
-    var dd = new Date(d + "T12:00:00");
-    var sel = d === date;
-    html += '<button class="dayPill' + (sel ? " sel" : "") + '" data-goday="' + d + '">' +
-      '<span class="dp1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) + '</span>' +
-      '<span class="dp2 n">' + dd.getDate() + '</span></button>';
-  });
-  html += '</div></div>';
+  var elsewhere = dirtyDates(date);
+  if (elsewhere.length) {
+    html += '<div class="pastBanner">לא נשמר עדיין: ' + elsewhere.map(function (d) {
+      return '<button class="linkBtn" data-goday="' + d + '">' + n(fmtDate(d)) + '</button>';
+    }).join(" ") + '</div>';
+  }
 
   // ---- weight ----
-  var w = doc.weights.filter(function (x) { return x.date === date; })[0];
-  html += '<div class="dayRow weightRow">' +
-    '<span class="rowLabel">משקל</span>' +
-    '<input type="number" step="0.1" id="dayWeight" class="numIn" placeholder="—" value="' +
-    (w ? w.kg.toFixed(1) : "") + '"/><span class="unit">ק״ג</span>' +
-    '<button class="btn accent sm" id="saveDayWeight">שמירה</button></div>';
+  var wDraft = view.drafts.weight[date];
+  var wVal = typeof wDraft === "string" ? wDraft : savedWeightText(date);
+  if (!isFuture) {
+    html += '<div class="dayRow weightRow">' +
+      '<span class="rowLabel">משקל</span>' +
+      '<input type="text" inputmode="decimal" id="dayWeight" class="numIn" placeholder="—" value="' +
+      esc(wVal) + '"/><span class="unit">ק״ג</span></div>';
+  }
 
   // ---- training ----
   /* An explicit button, NOT a <label><input type=checkbox>. Nesting the input
@@ -1340,6 +1437,24 @@ function dayScreen() {
     '<button class="chk" id="dayTraining" role="checkbox" aria-checked="' +
     (day.training ? "true" : "false") + '">' +
     '<span class="chkBox"></span><span>אימון</span></button></div>';
+
+  // ---- intake: same date as everything else on this screen ----
+  /* Today writes on each tap, like the training box. A past day is staged and
+     joins the one save below — so a stray tap on last Tuesday is never silent. */
+  if (!isFuture) {
+    html += '<div class="dayIntake">';
+    FT.INTAKE_ITEMS.forEach(function (it) {
+      var c = intakeShown(date, it.key);
+      var saved = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[it.key]) || 0);
+      html += '<div class="diItem"><span class="diLabel">' + esc(it.label) + '</span>' +
+        '<span class="stepper' + (!isToday && c !== saved ? ' dirty' : '') + '">' +
+        '<button class="stepBtn" data-intake-dec="' + it.key + '" data-intake-date="' + date + '" aria-label="פחות ' + esc(it.label) + '">−</button>' +
+        '<span class="stepVal n">' + c + '</span>' +
+        '<button class="stepBtn" data-intake-inc="' + it.key + '" data-intake-date="' + date + '" aria-label="עוד ' + esc(it.label) + '">+</button>' +
+        '</span></div>';
+    });
+    html += '</div>';
+  }
 
   // ---- tag buttons: same flow for all three ----
   html += '<div class="tagBar">';
@@ -1386,11 +1501,11 @@ function dayScreen() {
     html += '<div class="note">יש ארוחת מה שבא לי היום, אז אין התראות על פחמימות.</div>';
   }
 
-  // ---- explicit save ----
-  var dirty = dayDirty(date, day);
+  // ---- one explicit save for everything typed (and past-day intake) ----
+  var dirty = dayDirty(date);
   html += '<div class="btnRow">' +
     '<button class="btn gold grow" id="saveDay"' + (dirty ? "" : " disabled") + '>' +
-    (dirty ? "שמירה" : "אין שינוי לשמור") + '</button>' +
+    (dirty ? (isToday ? "שמירה" : "שמירה ל" + fmtDate(date)) : "אין שינוי לשמור") + '</button>' +
     (dirty ? '<button class="btn quiet" id="discardDay">ביטול</button>' : '') + '</div>';
 
   html += '</div>';
@@ -1402,12 +1517,17 @@ function dayScreen() {
  * ============================================================ */
 function weekScreen() {
   var today = FT.todayISO();
+  var start = FT.weekStart(view.weekAnchor || today);
+  var days = FT.weekDays(start, 7);
   var html = '<div class="screenHead full">' + icoCal() +
-    '<span class="screenTitle">תכנון השבוע</span></div>';
+    '<span class="screenTitle">תכנון השבוע</span>' +
+    '<span class="weekNav">' +
+    '<button class="weekArrow" data-weekshift="-7" aria-label="השבוע הקודם">›</button>' +
+    '<span class="n">' + fmtDate(days[0]) + '</span>' + ' עד ' + '<span class="n">' + fmtDate(days[6]) + '</span>' +
+    '<button class="weekArrow" data-weekshift="7" aria-label="השבוע הבא">‹</button></span></div>';
   html += '<div class="weekList full">';
-  FT.weekDays(today, 7).forEach(function (d) {
+  days.forEach(function (d) {
     var day = FT.dayDoc(doc.days, d);
-    var flags = FT.dayFlags(day);
     var dd = new Date(d + "T12:00:00");
     /* One line per meal, matching the day screen's language. A single joined
        string collapsed six separate meals into one run-on sentence. */
@@ -1419,12 +1539,13 @@ function weekScreen() {
             return '<span class="tagPill t-' + tg + '">' + esc(FT.dayTag(tg).label) + '</span>';
           }).join("") + '</span>';
       });
-    html += '<button class="weekRow' + (d === today ? " isToday" : "") + '" data-goday="' + d + '">' +
+    var past = d < today;
+    html += '<button class="weekRow' + (d === today ? " isToday" : "") + (past ? " isPast" : "") + '" data-goday="' + d + '">' +
       '<span class="wDate"><span class="wD1">' + (d === today ? "היום" : WEEKDAYS[dd.getDay()].replace("יום ", "")) +
       '</span><span class="wD2 n">' + dd.getDate() + '</span></span>' +
       '<span class="wBody">' +
       (lines.length ? '<span class="wLines">' + lines.join("") + '</span>'
-                    : '<span class="wSum empty">עדיין ריק — לחצו לתכנון</span>') +
+                    : '<span class="wSum empty">' + (past ? "לא נרשם" : "עדיין ריק — לחצו לתכנון") + '</span>') +
       '</span>' +
       (day.training ? '<span class="wTrain">✓</span>' : '') + '</button>';
   });
@@ -1472,8 +1593,8 @@ function goalsCard() {
       var badge, col;
       if (past) {
         var oc = FT.goalOutcome(g, doc.weights);
-        if (oc) { badge = oc.hit ? "הושג" : "+" + oc.delta.toFixed(1); col = oc.hit ? "var(--sage)" : "var(--rust)"; }
-        else { badge = "עבר"; col = "var(--dim)"; }
+        if (oc) { badge = oc.hit ? "הושג" : n("+" + oc.delta.toFixed(1)); col = oc.hit ? "var(--sage)" : "var(--rust)"; }
+        else { badge = "אין שקילה סמוכה"; col = "var(--dim)"; }
       } else if (ng && ng.id === g.id) { badge = "פעיל"; col = "var(--gold)"; }
       else { badge = "עתידי"; col = "var(--dim)"; }
 
@@ -1593,7 +1714,7 @@ function settingsCard() {
   html += '<div class="' + (stale ? "blk warn" : "note") + '">' +
     (stale ? '<div class="k">גיבוי</div><div class="v">' : '') +
     (doc.lastExportAt
-      ? "גיבוי אחרון: " + n(fmtDate(doc.lastExportAt.slice(0, 10))) + (stale ? " — עבר יותר מ-" + n("10") + " ימים." : "")
+      ? "גיבוי אחרון: " + n(fmtDate(FT.todayISO(new Date(doc.lastExportAt)))) + (stale ? " — עבר יותר מ-" + n("10") + " ימים." : "")
       : "עדיין לא גיבית. הנתונים קיימים רק במכשיר הזה.") +
     (stale ? '</div>' : '') + '</div>';
   html += '</div>';
@@ -1793,28 +1914,41 @@ function wire() {
 
   // ---- navigation ----
   each("[data-goto]", function (b) {
-    b.onclick = function () { go(b.getAttribute("data-goto")); };
+    b.onclick = function () {
+      var r = b.getAttribute("data-goto");
+      /* Home's "today" tiles mean TODAY. Without this, #/day fell back to the
+         last pill tapped, so tags and weight landed on last Thursday. */
+      if (r === "day") view.dayDate = null;
+      if (r === "week") view.weekAnchor = null;
+      var before = location.hash;
+      go(r);
+      if (location.hash === before) render();   // same hash: no hashchange fires
+    };
   });
+  /* Switching day keeps every draft — they are per date and persisted. */
   each("[data-goday]", function (b) {
     b.onclick = function () {
       var d = b.getAttribute("data-goday");
-      view.dayDate = d; view.picking = null; view.slotDrafts = null;
+      view.dayDate = d; view.picking = null;
       go("day", d);
+    };
+  });
+  each("[data-weekshift]", function (b) {
+    b.onclick = function () {
+      var base = view.weekAnchor || FT.todayISO();
+      var k = Number(b.getAttribute("data-weekshift"));
+      view.weekAnchor = k < 0 ? FT.dayRange(base, -k, 0)[0] : FT.dayRange(base, 0, k)[k];
+      render();
     };
   });
 
   // ---- day screen ----
-  on("saveDayWeight", function () {
-    var el = document.getElementById("dayWeight");
-    var kg = parseFloat(String(el.value).replace(",", "."));
-    if (!validWeight(kg)) { showToast("משקל לא תקין"); return; }
-    var date = currentDayDate();
-    if (FT.isFutureDate(date)) { showToast("אי אפשר לרשום שקילה בעתיד"); return; }
-    var before = doc.weights.slice();
-    doc.weights = FT.upsertWeight(doc.weights, date, kg).weights;
-    var ok = persist(); render();
-    showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה", ok ? function () { doc.weights = before; } : null);
-  });
+  on("dayWeight", function (e) {
+    view.drafts.weight[currentDayDate()] = e.target.value;
+    saveDrafts();
+    enableSaveDay();
+  }, "input");
+  on("dayWeight", function (e) { if (e.key === "Enter") saveDay(); }, "keydown");
   on("dayTraining", function () {
     var date = currentDayDate();
     var now = FT.dayDoc(doc.days, date).training;
@@ -1858,28 +1992,14 @@ function wire() {
   each("[data-slottext]", function (el) {
     el.oninput = function () {
       var date = currentDayDate();
-      if (!view.slotDrafts || view.slotDrafts.date !== date) {
-        view.slotDrafts = { date: date, text: {} };
-      }
-      view.slotDrafts.text[el.getAttribute("data-slottext")] = el.value;
-      // enable the save button without a full render, so typing is never interrupted
-      var save = document.getElementById("saveDay");
-      if (save && save.disabled) { save.disabled = false; save.textContent = "שמירה"; }
+      if (!view.drafts.slots[date]) view.drafts.slots[date] = {};
+      view.drafts.slots[date][el.getAttribute("data-slottext")] = el.value;
+      saveDrafts();
+      enableSaveDay();
     };
   });
-  on("saveDay", function () {
-    var date = currentDayDate();
-    if (!view.slotDrafts || view.slotDrafts.date !== date) return;
-    var days = doc.days;
-    FT.SLOT_KEYS.forEach(function (k) {
-      var t = view.slotDrafts.text[k];
-      if (typeof t === "string") days = FT.setSlotText(days, date, k, t);
-    });
-    doc.days = days; view.slotDrafts = null;
-    var ok = persist(); render();
-    showToast(ok ? "נשמר" : "לא ניתן לשמור במכשיר הזה");
-  });
-  on("discardDay", function () { view.slotDrafts = null; render(); });
+  on("saveDay", function () { saveDay(); });
+  on("discardDay", function () { clearDrafts(currentDayDate()); render(); });
 
   each("[data-proto]", function (b) {
     b.onclick = function () {
@@ -1888,21 +2008,27 @@ function wire() {
       render();
     };
   });
-  on("customHours", function (e) { view.customHours = e.target.value; }, "change");
+  on("customHours", function (e) { view.customHours = FT.clampProtocolHours(e.target.value); }, "change");
 
   on("toggleStartEdit", function () {
     view.showStartEdit = !view.showStartEdit;
-    if (view.showStartEdit && !doc.session && !view.startEditValue) view.startEditValue = toLocalInput(Date.now());
+    /* Opened: start from now. Closed: forget it — a value left behind here
+       used to start the NEXT fast at the hour the editor was opened. */
+    view.startEditValue = view.showStartEdit && !doc.session ? toLocalInput(Date.now()) : "";
     render();
   });
   on("startEdit", function (e) {
     if (doc.session) {
-      if (e.target.value) { doc.session.start = new Date(e.target.value).getTime(); persist(); render(); }
+      if (!e.target.value) return;
+      var ms = new Date(e.target.value).getTime();
+      var err = FT.checkFastStart(ms, Date.now(), doc.fastHistory);
+      if (err) { showToast(fastStartError(err)); render(); return; }
+      doc.session.start = ms; persist(); render(); scheduleReminders();
     } else { view.startEditValue = e.target.value; }
   }, "change");
 
   on("startBtn", function () {
-    startFast(view.protocol === "custom" ? (Number(view.customHours) || 16) : view.protocol);
+    startFast(view.protocol === "custom" ? FT.clampProtocolHours(view.customHours) : view.protocol);
   });
   on("startFreeBtn", function () { startFast(null); });
   on("stopBtn", stopFast);
@@ -1970,16 +2096,15 @@ function wire() {
   });
 
   // intake
-  on("intakeDate", function (e) { view.intakeDate = e.target.value; view.draft = null; render(); }, "change");
-  on("intakeToday", function () { view.intakeDate = null; view.draft = null; render(); });
-  on("saveIntake", saveIntakeDraft);
   on("cancelToday", restoreToday);
-  on("discardIntake", function () { view.draft = null; render(); });
   each("[data-intake-inc]", function (b) {
-    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1); };
+    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-inc"), 1, b.getAttribute("data-intake-date")); };
   });
   each("[data-intake-dec]", function (b) {
-    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-dec"), -1); };
+    b.onclick = function () { bumpIntake(b.getAttribute("data-intake-dec"), -1, b.getAttribute("data-intake-date")); };
+  });
+  each("[data-quick]", function (b) {
+    b.onclick = function () { bumpIntake(b.getAttribute("data-quick"), 1, null, { confirm: true }); };
   });
 
   on("toggleGoalForm", function () { view.showGoalForm = !view.showGoalForm; view.editingGoalId = null; render(); });
@@ -2034,9 +2159,18 @@ function wire() {
 }
 
 /* ---------- actions ---------- */
+function fastStartError(err) {
+  return err === "future" ? "שעת ההתחלה בעתיד"
+    : err === "tooLong" ? "צום ארוך מ־30 יום כנראה אינו נכון"
+    : err === "overlap" ? "שעת ההתחלה חופפת לצום קודם"
+    : "שעת התחלה לא תקינה";
+}
+
 function startFast(hours) {
-  var start = view.startEditValue ? new Date(view.startEditValue).getTime() : Date.now();
-  if (!isFinite(start)) start = Date.now();
+  /* The editor's value counts only while the editor is open. */
+  var start = view.showStartEdit && view.startEditValue ? new Date(view.startEditValue).getTime() : Date.now();
+  var err = FT.checkFastStart(start, Date.now(), doc.fastHistory);
+  if (err) { showToast(fastStartError(err)); return; }
   doc.session = { start: start, protocolHours: hours };
   view.startEditValue = ""; view.showStartEdit = false;
   persist(); render(); scheduleReminders();
@@ -2044,12 +2178,74 @@ function startFast(hours) {
 function stopFast() {
   if (!doc.session) return;
   var s = doc.session, end = Date.now();
-  if (end > s.start) doc.fastHistory.push({ start: s.start, end: end, protocolHours: s.protocolHours });
   doc.session = null; view.showStartEdit = false;
-  persist(); render();
+  if (end <= s.start) {
+    persist(); render(); scheduleReminders();
+    showToast("הצום בוטל — לא נשמר", function () { doc.session = s; scheduleReminders(); });
+    return;
+  }
+  var row = { start: s.start, end: end, protocolHours: s.protocolHours };
+  doc.fastHistory.push(row);
+  persist(); render(); scheduleReminders();
+  /* Undo removes THIS fast by its start — pop() removed whatever was last. */
   showToast("צום של " + ((end - s.start) / 3600000).toFixed(1) + " שעות נשמר", function () {
-    doc.fastHistory.pop(); doc.session = s;
+    doc.fastHistory = FT.removeFast(doc.fastHistory, row.start).history;
+    doc.session = s;
+    scheduleReminders();
   });
+}
+
+/* Enables the day screen's save button from an input handler, without a
+   render — typing must never be interrupted. */
+function enableSaveDay() {
+  var save = document.getElementById("saveDay");
+  var date = currentDayDate();
+  if (save && save.disabled && dayDirty(date)) {
+    save.disabled = false;
+    save.textContent = date === FT.todayISO() ? "שמירה" : "שמירה ל" + fmtDate(date);
+  }
+}
+
+/* One save for the day: meal text, the weight field, and a past day's staged
+   intake. All validated first, so a bad weight saves nothing rather than half. */
+function saveDay() {
+  var date = currentDayDate();
+  if (!dayDirty(date)) return;
+  var wText = view.drafts.weight[date];
+  var kg = null;
+  if (typeof wText === "string" && wText.trim() !== "" && wText.trim() !== savedWeightText(date)) {
+    kg = parseFloat(wText.replace(",", "."));
+    if (!validWeight(kg)) { showToast("משקל לא תקין"); return; }
+    if (FT.isFutureDate(date)) { showToast("אי אפשר לרשום שקילה בעתיד"); return; }
+  }
+
+  var before = { days: doc.days, weights: doc.weights.slice(), intakeLog: doc.intakeLog.slice() };
+  var parts = [];
+  var t = view.drafts.slots[date];
+  if (t) {
+    var days = doc.days, changed = false;
+    FT.SLOT_KEYS.forEach(function (k) {
+      if (typeof t[k] === "string" && t[k] !== FT.dayDoc(days, date).slots[k].text) {
+        days = FT.setSlotText(days, date, k, t[k]); changed = true;
+      }
+    });
+    doc.days = days;
+    if (changed) parts.push("ארוחות");
+  }
+  if (kg !== null) {
+    doc.weights = FT.upsertWeight(doc.weights, date, kg).weights;
+    parts.push("משקל");
+  }
+  if (intakeDraftDirty(date)) parts = parts.concat(applyIntakeDraft(date));
+
+  var ok = persist();
+  if (ok) clearDrafts(date);
+  render();
+  if (!ok) { showToast("לא ניתן לשמור במכשיר הזה — הטיוטה נשמרה"); return; }
+  showToast((date === FT.todayISO() ? "נשמר" : "נשמר ל" + fmtDate(date)) +
+    (parts.length ? " · " + parts.join(", ") : ""), function () {
+      doc.days = before.days; doc.weights = before.weights; doc.intakeLog = before.intakeLog;
+    });
 }
 
 function validWeight(kg) { return isFinite(kg) && kg > 20 && kg <= 300; }
@@ -2116,6 +2312,7 @@ function saveEditedFast(origStart) {
     showToast(r.error === "order" ? "הסיום חייב להיות אחרי ההתחלה"
       : r.error === "future" ? "אי אפשר לרשום צום שנגמר בעתיד"
       : r.error === "tooLong" ? "צום ארוך מ־30 יום כנראה אינו נכון"
+      : r.error === "overlap" ? "הצום חופף לצום אחר"
       : "לא ניתן לעדכן את הצום");
     return;
   }
@@ -2128,22 +2325,23 @@ function saveEditedFast(origStart) {
   showToast("הצום עודכן", function () { doc.fastHistory = before; });
 }
 
-function bumpIntake(key, delta) {
-  var date = view.intakeDate || FT.todayISO();
+function bumpIntake(key, delta, dateArg, opts) {
+  var date = dateArg || FT.todayISO();
   var isToday = date === FT.todayISO();
+  if (FT.isFutureDate(date)) return;
 
-  /* A past day is staged, not written. Nothing on screen changes to prove a
-     past-day write happened, so there has to be a save the user performs. */
+  /* A past day is staged, not written: it joins the day screen's one save. */
   if (!isToday) {
-    if (!view.draft || view.draft.date !== date) {
+    if (!view.drafts.intake[date]) {
       var counts = FT.intakeOn(doc.intakeLog, date);
-      view.draft = { date: date, counts: {} };
+      view.drafts.intake[date] = {};
       FT.INTAKE_ITEMS.forEach(function (it) {
-        view.draft.counts[it.key] = Math.max(0, Number(counts[it.key]) || 0);
+        view.drafts.intake[date][it.key] = Math.max(0, Number(counts[it.key]) || 0);
       });
     }
-    var cur = view.draft.counts[key] || 0;
-    view.draft.counts[key] = Math.max(0, cur + delta);
+    var cur = view.drafts.intake[date][key] || 0;
+    view.drafts.intake[date][key] = Math.max(0, cur + delta);
+    saveDrafts();
     render();
     return;
   }
@@ -2151,6 +2349,7 @@ function bumpIntake(key, delta) {
   var have = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[key]) || 0);
   if (delta < 0 && have === 0) return;
 
+  var beforeLog = doc.intakeLog.slice();
   if (delta > 0) {
     var r = FT.addIntakeEvent(doc.intakeLog, key, Date.now(), false);
     if (!r.added) return;
@@ -2168,26 +2367,30 @@ function bumpIntake(key, delta) {
   /* Only prompt for things that actually break a fast — black coffee and
      plain tea don't, and nagging every morning would train you to ignore it.
      Offered, never automatic: a mistap must not destroy a running timer. */
+  var item = FT.intakeItem(key);
   if (delta > 0 && doc.session && FT.breaksFast(key)) {
-    var item = FT.intakeItem(key);
     showToast(item.label + " בזמן צום של " + fmtHM(activeHours()) + " שעות — זה שובר את הצום.", {
       label: "סיים צום",
       fn: function () { stopFast(); }
     });
+  } else if (opts && opts.confirm) {
+    /* The home quick-log has no stepper in view to prove the write. */
+    showToast("נרשם: " + item.label + " · " + (have + delta) + " היום", function () { doc.intakeLog = beforeLog; });
   }
 }
 
-/* Applies the staged counts for a past day by adding or removing events until
-   each item matches. Backdated events land at noon flagged approx, so they
-   count toward totals but never toward the live "circulating now" figures. */
-function saveIntakeDraft() {
-  if (!view.draft) return;
-  var date = view.draft.date;
+/* Applies a past day's staged counts by adding or removing events until each
+   item matches. Backdated events land at noon flagged approx, so they count
+   toward totals but never toward the live "circulating now" figures.
+   Returns the labels that changed. */
+function applyIntakeDraft(date) {
+  var draft = view.drafts.intake[date];
+  if (!draft) return [];
   var noonMs = new Date(date + "T12:00:00").getTime();
   var changedItems = [];
-
   FT.INTAKE_ITEMS.forEach(function (it) {
-    var want = Math.max(0, Number(view.draft.counts[it.key]) || 0);
+    if (!isFinite(draft[it.key])) return;
+    var want = Math.max(0, Number(draft[it.key]) || 0);
     var have = Math.max(0, Number(FT.intakeOn(doc.intakeLog, date)[it.key]) || 0);
     if (want === have) return;
     changedItems.push(it.label);
@@ -2199,12 +2402,7 @@ function saveIntakeDraft() {
       doc.intakeLog = FT.removeIntakeEvent(doc.intakeLog, it.key, date).log;
     }
   });
-
-  var ok = persist();
-  view.draft = null;
-  render();
-  showToast(ok ? "נשמר ל" + fmtDate(date) + " · " + changedItems.join(", ")
-               : "לא ניתן לשמור במכשיר הזה");
+  return changedItems;
 }
 
 function saveMeasure() {
@@ -2263,8 +2461,13 @@ function exportData() {
   var a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "fasttrack-" + FT.todayISO() + ".json";
+  /* In the document, and revoked later: a detached link, or revoking the URL
+     straight after click(), can cancel the download on some browsers while
+     the app records the backup as done. */
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   persist(); render();
 }
 
@@ -2274,13 +2477,17 @@ function importData(file) {
     var parsed;
     try { parsed = JSON.parse(reader.result); }
     catch (e) { showToast("הקובץ אינו JSON תקין"); return; }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) { showToast("הקובץ אינו גיבוי של האפליקציה"); return; }
     if (parsed.schemaVersion > FT.SCHEMA_VERSION) { showToast("הקובץ נשמר בגרסה חדשה יותר — לא ייובא"); return; }
     var r = FT.migrate(JSON.stringify(parsed), null, null);
-    if (r.error) { showToast(r.error); return; }
-    var before = doc;
+    if (r.error || !r.doc) { showToast(r.error || "לא ניתן לייבא את הקובץ"); return; }
+    var before = doc, beforeBase = view.baselineLog;
     doc = r.doc;
-    persist(); render();
-    showToast("הנתונים יובאו", function () { doc = before; });
+    /* "Cancel today's changes" restores to the open-time snapshot; after an
+       import that snapshot belongs to a different doc. */
+    view.baselineLog = doc.intakeLog.slice();
+    persist(); render(); scheduleReminders();
+    showToast("הנתונים יובאו", function () { doc = before; view.baselineLog = beforeBase; });
   };
   reader.readAsText(file);
 }

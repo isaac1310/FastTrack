@@ -123,6 +123,19 @@
       var p = FT.paceToGoal(GOAL, series(76, -0.25, 22), "2026-08-11");
       return eq(p.verdict, "ahead", "verdict");
     });
+    check("a stale series is not extrapolated to today", function () {
+      // Shipped: 54 days without a weigh-in read "ahead of pace", projecting 54.7 kg.
+      var w = series(76, -0.13, 22);                    // ends 11 Aug
+      var p = FT.paceToGoal({ id: "g", date: "2026-12-31", targetKg: 66, deletedAt: null }, w, "2026-10-04");
+      if (p.verdict !== "stale") return "verdict was " + p.verdict;
+      if (p.projectedWeightAtGoal !== null) return "projected " + p.projectedWeightAtGoal + " from stale data";
+      return near(p.currentTrend, w[w.length - 1].kg, 1.0, "currentTrend (extrapolated across the gap?)");
+    });
+    check("a few days without a weigh-in is not stale", function () {
+      var p = FT.paceToGoal({ id: "g", date: "2026-12-31", targetKg: 66, deletedAt: null },
+        series(76, -0.13, 22), "2026-08-16");
+      return p.verdict !== "stale" ? true : "5 days was treated as stale";
+    });
     check("aggressive flag fires above 1.0 kg/week required", function () {
       var soon = { id: "g", date: "2026-08-25", targetKg: 70, deletedAt: null };
       var p = FT.paceToGoal(soon, series(76, -0.05, 22), "2026-08-11");
@@ -164,7 +177,14 @@
       return oc && oc.hit === true ? true : "expected a hit, got " + JSON.stringify(oc);
     });
     check("future goal has no outcome yet", function () {
-      return isNull(FT.goalOutcome(GOAL, series(76, -0.13, 22)));
+      // An explicit "today": GOAL is dated 18 Sep 2026, and relying on the real
+      // clock turned this into a failure the day that date passed.
+      return isNull(FT.goalOutcome(GOAL, series(76, -0.13, 22), "2026-08-11"));
+    });
+    check("no weigh-in near the goal date means no outcome, not a guess", function () {
+      // Shipped: last reading 11 Aug, goal 18 Sep — the fit was extrapolated
+      // five weeks and the goal marked "hit".
+      return isNull(FT.goalOutcome(GOAL, series(76, -0.13, 22), "2026-10-04"));
     });
     check("later weight loss cannot retro-fix a missed goal", function () {
       var w = series(76, -0.02, 10, "2026-07-01").concat(series(70, -0.5, 12, "2026-07-20"));
@@ -772,6 +792,23 @@
       return eq(FT.compositionSignal(W3, m).status, "fat", "status");
     });
 
+    check("weigh-ins after the last measurement do not leak into the verdict", function () {
+      // Shipped: the fit anchored on the LAST weigh-in, so months of later
+      // data were back-projected onto the measurement window.
+      var later = [];
+      for (var i = 0; i < 50; i++) {
+        var d = new Date("2026-08-15T12:00:00"); d.setDate(d.getDate() + i);
+        later.push({ date: FT.todayISO(d), kg: 80 + i * 0.1 });
+      }
+      var m = [
+        { date: "2026-07-21", waistCm: 98, thighCm: 58, onProtocol: true },
+        { date: "2026-07-28", waistCm: 97, thighCm: 57.6, onProtocol: true },
+        { date: "2026-08-04", waistCm: 96, thighCm: 57.5, onProtocol: true }
+      ];
+      var r = FT.compositionSignal(W3.concat(later), m);
+      return near(r.weightDelta, -1.8, 0.6, "weightDelta");
+    });
+
     group("implausibleWaistDelta");
     check("fires at 3.5cm, silent at 2cm", function () {
       if (FT.implausibleWaistDelta(96, 99.5) !== true) return "3.5cm did not fire";
@@ -888,6 +925,49 @@
     check("removeFast on a missing start changes nothing", function () {
       var r = FT.removeFast([{ start: 100, end: 200 }], 555);
       return r.history.length === 1 && r.removed === null ? true : "got " + JSON.stringify(r);
+    });
+
+    check("refuses an edit that overlaps another fast", function () {
+      var h = [{ start: 1000, end: 5000, protocolHours: 16 }, { start: 10000, end: 15000, protocolHours: 16 }];
+      var r = FT.editFast(h, 10000, 4000, 15000, 99999);
+      return r.ok === false && r.error === "overlap" ? true : JSON.stringify(r);
+    });
+
+    group("fast start");
+    check("a start in the future is refused", function () {
+      // Shipped: the ring sat at zero, the pill read -1:30, and Undo after
+      // stopping popped the previous REAL fast.
+      return eq(FT.checkFastStart(Date.now() + 3600000, Date.now(), []), "future", "error");
+    });
+    check("a start inside the previous fast is refused", function () {
+      var now = Date.now();
+      return eq(FT.checkFastStart(now - 10 * 3600000, now, [{ start: now - 30 * 3600000, end: now - 8 * 3600000 }]),
+        "overlap", "error");
+    });
+    check("a start after the previous fast is fine", function () {
+      var now = Date.now();
+      return isNull(FT.checkFastStart(now - 2 * 3600000, now, [{ start: now - 30 * 3600000, end: now - 8 * 3600000 }]));
+    });
+    check("custom protocol hours are clamped to 1..72", function () {
+      var a = FT.clampProtocolHours(-5), b = FT.clampProtocolHours(200), c = FT.clampProtocolHours("abc");
+      return a === 1 && b === 72 && c === 16 ? true : [a, b, c].join(",");
+    });
+
+    group("weightWeekChange");
+    check("the week change is by date, not by reading count", function () {
+      // Shipped: compared with the 8th-last reading, whatever its date.
+      var w = [{ date: "2026-07-01", kg: 80 }, { date: "2026-07-02", kg: 80 }, { date: "2026-07-03", kg: 80 },
+               { date: "2026-07-04", kg: 80 }, { date: "2026-07-05", kg: 80 }, { date: "2026-07-06", kg: 80 },
+               { date: "2026-07-07", kg: 80 }, { date: "2026-08-20", kg: 75 }];
+      return isNull(FT.weightWeekChange(w).delta, "delta across a 6-week gap");
+    });
+    check("a daily series gives about a week of slope", function () {
+      var r = FT.weightWeekChange(series(76, -0.13, 22));
+      return near(r.delta, -0.91, 0.35, "delta");
+    });
+    check("reports the last reading as weighed, not the trend", function () {
+      var r = FT.weightWeekChange([{ date: "2026-08-01", kg: 76 }, { date: "2026-08-02", kg: 74 }]);
+      return eq(r.kg, 74, "kg");
     });
 
     group("weekStart");
@@ -1008,6 +1088,26 @@
       var r = FT.normalizeDoc({ schemaVersion: 2 });
       return Array.isArray(r.goals) && Array.isArray(r.weights) && Array.isArray(r.measures) &&
         Array.isArray(r.fastHistory) ? true : "arrays not repaired";
+    });
+    check("unrecognised shapes are REFUSED, never turned into an empty doc", function () {
+      // Shipped: these fell through to the v1 path and an import replaced
+      // every record with an empty doc.
+      var bad = ["null", JSON.stringify({ schemaVersion: "6", weights: [{ date: "2026-08-01", kg: 70 }] }),
+                 JSON.stringify({ schemaVersion: 0 }), JSON.stringify({ schemaVersion: 1 }), "[]", "5"];
+      for (var i = 0; i < bad.length; i++) {
+        var r = FT.migrate(bad[i], null, null);
+        if (r.doc) return bad[i] + " produced a doc instead of a refusal";
+      }
+      return true;
+    });
+    check("a v1-shaped blob keeps its entries", function () {
+      var r = FT.migrate(JSON.stringify({ entries: [{ date: "2026-08-01", weight: 76 }] }), null, null);
+      return r.doc && r.doc.weights.length === 1 ? true : "entries lost: " + JSON.stringify(r.doc && r.doc.weights);
+    });
+    check("a string kg is coerced, so render() cannot throw on .toFixed", function () {
+      var r = FT.normalizeDoc({ schemaVersion: 6, weights: [{ date: "2026-08-01", kg: "72.4" }, { date: "2026-08-02", kg: "x" }] });
+      if (r.weights.length !== 1) return "expected the unusable row dropped, got " + r.weights.length;
+      return eq(typeof r.weights[0].kg, "number", "kg type");
     });
     check("a session with a non-finite start is discarded", function () {
       var r = FT.normalizeDoc({ schemaVersion: 2, session: { start: "banana" } });
@@ -1324,6 +1424,9 @@
       location.hash = "#/day"; render();
       var el = document.getElementById("slot_dinner");
       if (!el) { location.hash = before; render(); return skip("day screen did not render a dinner slot"); }
+      // Drafts persist now, so snapshot them and put them back afterwards —
+      // the suite must leave nothing behind on the phone.
+      var draftsBefore = JSON.stringify(view.drafts);
       el.focus(); el.value = "בדיקה"; el.dispatchEvent(new Event("input", { bubbles: true }));
       el.setSelectionRange(3, 3);
       render();
@@ -1331,10 +1434,41 @@
       var okId = a && a.id === "slot_dinner";
       var okCaret = okId && a.selectionStart === 3;
       var okVal = okId && a.value === "בדיקה";
+      view.drafts = JSON.parse(draftsBefore); saveDrafts();
       location.hash = before; render();
       if (!okId) return "focus was lost across render()";
       if (!okCaret) return "caret moved across render()";
       return okVal ? true : "the draft text was lost across render()";
+    });
+    check("switching day keeps unsaved meal text", function () {
+      // Shipped: tapping another day pill set the drafts to null, silently.
+      if (!inApp) return skip("not running inside the app page");
+      var before = location.hash, draftsBefore = JSON.stringify(view.drafts), dayBefore = view.dayDate;
+      view.dayDate = null; location.hash = "#/day"; render();
+      var date = currentDayDate();
+      var el = document.getElementById("slot_late");
+      if (!el) { location.hash = before; render(); return skip("day screen did not render a late slot"); }
+      el.value = "טיוטה"; el.dispatchEvent(new Event("input", { bubbles: true }));
+      var other = document.querySelector('.dayPill[data-goday]:not(.sel)');
+      if (other) other.click();
+      var kept = view.drafts.slots[date] && view.drafts.slots[date].late === "טיוטה";
+      view.drafts = JSON.parse(draftsBefore); saveDrafts();
+      view.dayDate = dayBefore; location.hash = before; render();
+      if (!other) return skip("no other day pill to switch to");
+      return kept ? true : "the draft was dropped on a day switch";
+    });
+    check("home's day tile opens TODAY, not the last day viewed", function () {
+      // Shipped: #/day fell back to the last pill tapped, so tags landed on Thursday.
+      if (!inApp) return skip("not running inside the app page");
+      var before = location.hash, dayBefore = view.dayDate;
+      view.dayDate = FT.dayRange(FT.todayISO(), 0, 3)[3];
+      location.hash = "#/home"; render();
+      var tile = document.querySelector('#app [data-goto="day"]');
+      if (!tile) { view.dayDate = dayBefore; location.hash = before; render(); return skip("home has no day tile"); }
+      tile.click();
+      var got = currentDayDate();
+      view.dayDate = dayBefore; location.hash = before; render();
+      return eq(got, FT.todayISO(), "date opened");
     });
     check("training toggles on a real CLICK, not just a dispatched change", function () {
       /* Shipped broken in v3.0.0: the checkbox was nested in its own <label>,

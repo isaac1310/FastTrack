@@ -33,9 +33,11 @@ device and leaves it only through a JSON export you trigger yourself.
   is measurable, "clean of meat" is stated as a fact about what you ate, and
   detox claims are refused outright.
 
-  To log a past day, set the date at the top of the intake card. The card is
-  visibly marked while it is not today, and past-day changes are staged until
-  you press save — nothing on screen would otherwise prove the write happened.
+  Today's intake is one tap from home (quick log) or from the day screen. To
+  log a past day, open that day — the day screen carries meals, weight,
+  training and intake for whichever date it shows, with week arrows to reach
+  earlier weeks. A past day is visibly marked, and its intake changes are
+  staged with the typed fields until you press save.
 - **An Ayurvedic lens**, in its own clearly-labelled card. Doshas, agni, and
   the tradition's view of fasting, coffee, alcohol and meat. Kept separate from
   the physiology on purpose: caffeine's half-life is a measurement, dosha
@@ -47,8 +49,11 @@ device and leaves it only through a JSON export you trigger yourself.
 ## Screens
 
 Home hub with hash routing, then: **היום** (six meal slots as a ruled notepad,
-weight, training, repeatable tags with daily-limit flags), **השבוע** (seven days
-ahead, same store), plus fasting, tracking, intake and settings.
+weight, training, intake steppers, repeatable tags with daily-limit flags),
+**השבוע** (Sunday..Saturday, with week arrows, same store), plus fasting,
+tracking and settings. Unsaved typed input is kept per date in its own
+localStorage key, so switching day or closing the app never loses it — the
+doc itself still only changes on an explicit save.
 
 Two themes in one retro language — light is saturated ink on pastel ground,
 dark is pastel ink on deep ground, same hues in both.

@@ -130,6 +130,19 @@ Full list in `DESIGN-BRIEF.md` §3. The four that have already caused shipped bu
    secondary problems while this one character stayed. Scope wiring
    selectors to an element type (`button[data-theme]`) or to `#app`, and
    keep the selftest check that asserts the root carries no click handler.
+22. **Never extrapolate weight across a gap.** With the last weigh-in 54 days
+   old, the pace fit was anchored on today, found no points in its window,
+   fell back to the whole series and projected August onto October —
+   "ahead of pace", 54.7 kg, and a goal with no nearby reading marked "hit".
+   Past `PACE_STALE_DAYS` the card reports the last known level and refuses
+   a verdict; a goal is scored only from a reading within
+   `GOAL_EVIDENCE_DAYS` of its date. Anything "per week" is by date, never
+   "the 8th-last reading".
+23. **Typed input is never discarded without the user saying so.** Drafts are
+   per date and persisted (`aviente-drafts`), so a day switch, an app kill or
+   the service-worker reload cannot drop them; the doc still changes only on
+   an explicit save. A selftest that types into the app must restore
+   `view.drafts` afterwards.
 
 Contrast: every text colour is annotated with its measured ratio in the
 stylesheet. Compute before changing one — do not judge by eye.
@@ -142,7 +155,7 @@ node build.mjs
 
 Then `__selftest()` in the console, or open with `?dev=1`. Run **four**
 combinations: 412px and desktop, each in light and dark. A run in one theme is
-never evidence about the other. Expect `0 failed` at each; the suite is 184
+never evidence about the other. Expect `0 failed` at each; the suite is 213
 checks. Two checks legitimately skip by context: the opposite width's layout
 check (always exactly one of the two), and the picker-wiring check when the
 route renders no picker input — to see that one actually run, open the
