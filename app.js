@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var APP_VERSION = "3.2.1";
+var APP_VERSION = "3.3.0";
 var LS_KEY = "fasttrack.doc";
 var SCHEMA_VERSION = 6;
 
@@ -341,7 +341,8 @@ function migrate(raw, v1entries, v1session) {
     }
     /* v2 → v3 → v4, upgraded in place. Refusing would strand every weigh-in
        already on the phone, and each step is information-preserving. */
-    if (parsed && parsed.schemaVersion >= 2 && parsed.schemaVersion < SCHEMA_VERSION) {
+    if (parsed && typeof parsed.schemaVersion === "number" &&
+        parsed.schemaVersion >= 2 && parsed.schemaVersion < SCHEMA_VERSION) {
       if (parsed.schemaVersion === 2) {
         parsed.intake = Array.isArray(parsed.intake) ? parsed.intake : [];
         parsed.schemaVersion = 3;
@@ -403,9 +404,15 @@ function migrate(raw, v1entries, v1session) {
         rawPreserved: raw
       };
     }
-    if (parsed && parsed.schemaVersion === undefined && !Array.isArray(parsed.entries)) {
+    /* Anything else is refused. Falling through to the v1 path built an EMPTY
+       doc from `null`, a string schemaVersion ("6"), 0, 1, or an object with
+       an `entries` array — and an import then replaced every record with it. */
+    var v1Shape = parsed && typeof parsed === "object" &&
+      parsed.schemaVersion === undefined && Array.isArray(parsed.entries);
+    if (!v1Shape) {
       return { doc: null, error: "מבנה נתונים לא מוכר — לא נגענו בהם.", rawPreserved: raw };
     }
+    if (!Array.isArray(v1entries) || !v1entries.length) v1entries = parsed.entries;
   }
 
   // v1 → v2
@@ -445,8 +452,21 @@ function normalizeDoc(d) {
   d.profile = Object.assign({}, base.profile, d.profile || {});
   d.reminders = Object.assign({}, base.reminders, d.reminders || {});
   d.goals = Array.isArray(d.goals) ? d.goals : [];
-  d.weights = Array.isArray(d.weights) ? d.weights : [];
-  d.measures = Array.isArray(d.measures) ? d.measures : [];
+  /* Numbers are coerced, not trusted: a hand-edited "72.4" passes isFinite and
+     then throws on .toFixed inside render(), blanking the app. Only rows with
+     no usable value at all are dropped — they could never be displayed. */
+  d.weights = (Array.isArray(d.weights) ? d.weights : [])
+    .filter(function (w) { return w && typeof w.date === "string" && isFinite(parseFloat(w.kg)); })
+    .map(function (w) { w.kg = parseFloat(w.kg); return w; });
+  d.measures = (Array.isArray(d.measures) ? d.measures : [])
+    .filter(function (m) { return m && typeof m.date === "string"; })
+    .map(function (m) {
+      m.waistCm = isFinite(parseFloat(m.waistCm)) ? parseFloat(m.waistCm) : null;
+      m.thighCm = isFinite(parseFloat(m.thighCm)) ? parseFloat(m.thighCm) : null;
+      return m;
+    });
+  d.goals = d.goals.filter(function (g) { return g && isFinite(parseFloat(g.targetKg)); })
+    .map(function (g) { g.targetKg = parseFloat(g.targetKg); return g; });
   d.intakeLog = Array.isArray(d.intakeLog) ? d.intakeLog : [];
   d.dismissed = (d.dismissed && typeof d.dismissed === "object") ? d.dismissed : {};
   d.days = (d.days && typeof d.days === "object" && !Array.isArray(d.days)) ? d.days : {};
@@ -572,6 +592,11 @@ function trendSlopePerDay(weights, windowDays) {
 }
 
 var PACE_WINDOW_DAYS = 21;
+/* Past this many days without a weigh-in the pace card reports the last known
+   level and refuses a verdict or a projection. */
+var PACE_STALE_DAYS = 10;
+/* A goal is only scored hit or missed from a weigh-in this close before its date. */
+var GOAL_EVIDENCE_DAYS = 7;
 
 function paceToGoal(goal, weights, todayStr) {
   if (!goal) return null;
@@ -579,20 +604,29 @@ function paceToGoal(goal, weights, todayStr) {
   var sorted = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg); });
   if (!sorted.length) return null;
 
-  var fit = trendFit(weights, PACE_WINDOW_DAYS, t);
   var lastPt = sorted.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).pop();
+  var staleDays = Math.max(0, daysBetween(lastPt.date, t));
+  var stale = staleDays > PACE_STALE_DAYS;
+
+  /* A stale series is fitted at its OWN last reading, never at today. Anchoring
+     the window on today found no points, fell back to the whole series and
+     extrapolated the line across the gap: after 54 days without a weigh-in the
+     card said "ahead of pace" and projected 54.7 kg. A line through August says
+     nothing about October. */
+  var fit = trendFit(weights, PACE_WINDOW_DAYS, stale ? lastPt.date : t);
 
   // With a single reading there is no line to fit; fall back to the reading.
-  var current = fit ? fit.levelAt(t) : lastPt.kg;
+  var current = fit ? fit.levelAt(stale ? lastPt.date : t) : lastPt.kg;
   var daysLeft = daysBetween(t, goal.date);
   var toLose = current - goal.targetKg;
   var requiredKgPerWeek = daysLeft > 0 ? (toLose / daysLeft) * 7 : null;
 
   var slope = fit ? fit.slopePerDay : null; // kg/day, negative = losing
   var actualKgPerWeek = slope === null ? null : slope * 7;
-  var projectedWeightAtGoal = slope === null ? null : +(current + slope * Math.max(0, daysLeft)).toFixed(1);
+  var projectedWeightAtGoal = (slope === null || stale) ? null
+    : +(current + slope * Math.max(0, daysLeft)).toFixed(1);
 
-  var verdict = "unknown";
+  var verdict = stale ? "stale" : "unknown";
   if (projectedWeightAtGoal !== null) {
     var miss = projectedWeightAtGoal - goal.targetKg;
     verdict = miss <= -0.3 ? "ahead" : (miss <= 0.3 ? "onpace" : "behind");
@@ -606,17 +640,24 @@ function paceToGoal(goal, weights, todayStr) {
     actualKgPerWeek: actualKgPerWeek === null ? null : +actualKgPerWeek.toFixed(2),
     projectedWeightAtGoal: projectedWeightAtGoal,
     verdict: verdict,
+    staleDays: staleDays,
+    lastDate: lastPt.date,
     aggressive: requiredKgPerWeek !== null && requiredKgPerWeek > 1.0
   };
 }
 
-function goalOutcome(goal, weights) {
+function goalOutcome(goal, weights, todayStr) {
   if (!goal || !goal.date) return null;
-  var t = todayISO();
+  var t = todayStr || todayISO();
   if (goal.date >= t) return null;
   // only readings up to the goal date — a later loss must not retro-fix a miss
   var upTo = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg) && w.date <= goal.date; });
   if (!upTo.length) return null;
+  /* No weigh-in near the goal date means there is no outcome to report. The
+     fit used to be extrapolated across the gap, so a goal with no reading in
+     the five weeks before it was still marked "hit". */
+  var lastBefore = upTo.reduce(function (m, w) { return w.date > m ? w.date : m; }, "");
+  if (daysBetween(lastBefore, goal.date) > GOAL_EVIDENCE_DAYS) return null;
   var fit = trendFit(upTo, PACE_WINDOW_DAYS, goal.date);
   var level = fit ? fit.levelAt(goal.date)
     : upTo.sort(function (a, b) { return a.date < b.date ? -1 : 1; }).pop().kg;
@@ -642,12 +683,16 @@ function compositionSignal(weights, measures) {
   }
 
   var waistDelta = on[on.length - 1].waistCm - on[0].waistCm;
-  var ws = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg); });
-  if (ws.length < 2) return { status: "insufficient", reason: "אין מספיק שקילות." };
+  var first = on[0].date, last = on[on.length - 1].date;
+  /* Only weigh-ins inside the measurement window. trendFit anchors its window
+     on its LAST point, so passing the whole series fitted the most recent
+     weeks and back-projected them onto the measurement dates. */
+  var ws = (weights || []).filter(function (w) {
+    return w && w.date && isFinite(w.kg) && w.date >= first && w.date <= last;
+  });
+  if (ws.length < 2) return { status: "insufficient", reason: "אין מספיק שקילות בטווח המדידות." };
 
-  // Fit across the measurement window, so the weight delta is compared
-  // over exactly the same span as the waist delta.
-  var fit = trendFit(ws, span + 1, on[on.length - 1].date);
+  var fit = trendFit(ws);
   if (!fit) return { status: "insufficient", reason: "אין מספיק שקילות בטווח המדידות." };
   var weightDelta = fit.levelAt(on[on.length - 1].date) - fit.levelAt(on[0].date);
 
@@ -682,6 +727,25 @@ function compositionSignal(weights, measures) {
  * displaced, so the caller can offer an undo. Two rows on one date would be
  * double-counted by the trend fit, so this invariant is enforced in one place
  * rather than at each call site. */
+/* The latest weigh-in and its change over a week, by DATE. The tiles used to
+   compare against the 8th-last reading, which with gaps spans any length of
+   time. The change is a fit of the RAW points of the last two weeks, times
+   seven — the smoothed series lags at its end (see trendFit). Null when there
+   is not enough recent data, rather than a misleading number. */
+var WEEK_CHANGE_WINDOW_DAYS = 14;
+function weightWeekChange(weights) {
+  var sm = smoothWeights(weights);
+  if (!sm.length) return { date: null, kg: null, trend: null, delta: null };
+  var last = sm[sm.length - 1];
+  var recent = sm.filter(function (p) { return daysBetween(p.date, last.date) <= WEEK_CHANGE_WINDOW_DAYS; });
+  var delta = null;
+  if (recent.length >= 3 && daysBetween(recent[0].date, last.date) >= 5) {
+    var fit = trendFit(recent);
+    if (fit) delta = +(fit.slopePerDay * 7).toFixed(1);
+  }
+  return { date: last.date, kg: last.kg, trend: last.trend, delta: delta };
+}
+
 function upsertWeight(weights, date, kg) {
   var list = (weights || []).filter(function (w) { return w && w.date && isFinite(w.kg); });
   var replaced = list.filter(function (w) { return w.date === date; })[0] || null;
@@ -1436,8 +1500,35 @@ function editFast(history, origStart, newStart, newEnd, nowMs) {
   if (newEnd <= newStart) return { ok: false, error: "order" };
   if (newEnd - newStart > MAX_FAST_MS) return { ok: false, error: "tooLong" };
   if (isFinite(nowMs) && newEnd > nowMs) return { ok: false, error: "future" };
+  /* Two fasts cannot cover the same hour; overlapping rows inflate every stat. */
+  for (var j = 0; j < h.length; j++) {
+    if (j === i || !h[j]) continue;
+    if (newStart < h[j].end && newEnd > h[j].start) return { ok: false, error: "overlap" };
+  }
   h[i] = { start: newStart, end: newEnd, protocolHours: h[i].protocolHours };
   return { ok: true, history: h };
+}
+
+/* Validates the start of a running fast: null when fine, else an error key.
+   A start in the future left the ring at zero and the top pill at "-1:30", and
+   stopping it then pushed nothing while Undo popped the previous real fast. */
+function checkFastStart(startMs, nowMs, history) {
+  var now = isFinite(nowMs) ? nowMs : Date.now();
+  if (!isFinite(startMs)) return "invalid";
+  if (startMs > now + 60000) return "future";
+  if (now - startMs > MAX_FAST_MS) return "tooLong";
+  var h = history || [];
+  for (var i = 0; i < h.length; i++) {
+    if (h[i] && isFinite(h[i].end) && startMs < h[i].end) return "overlap";
+  }
+  return null;
+}
+
+/* Custom protocol length. The input's min/max are advisory only. */
+function clampProtocolHours(v) {
+  var h = Math.round(Number(v));
+  if (!isFinite(h)) return 16;
+  return Math.max(1, Math.min(72, h));
 }
 
 function removeFast(history, start) {
@@ -1513,6 +1604,9 @@ window.FT = {
   implausibleWaistDelta: implausibleWaistDelta, trendSlopePerDay: trendSlopePerDay,
   trendFit: trendFit, loadDoc: loadDoc, saveDoc: saveDoc,
   upsertWeight: upsertWeight, moveWeight: moveWeight, isFutureDate: isFutureDate,
+  PACE_STALE_DAYS: PACE_STALE_DAYS, GOAL_EVIDENCE_DAYS: GOAL_EVIDENCE_DAYS,
+  weightWeekChange: weightWeekChange, checkFastStart: checkFastStart,
+  clampProtocolHours: clampProtocolHours,
   INTAKE_ITEMS: INTAKE_ITEMS, intakeItem: intakeItem, breaksFast: breaksFast,
   addIntakeEvent: addIntakeEvent, removeIntakeEvent: removeIntakeEvent,
   intakeEvents: intakeEvents, dayBounds: dayBounds,
